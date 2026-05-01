@@ -391,6 +391,12 @@ RUN node /tmp/patch_igdb_time_to_beat.js
 COPY patch_stats_distinct_game_runtime.js /tmp/patch_stats_distinct_game_runtime.js
 RUN node /tmp/patch_stats_distinct_game_runtime.js
 
+# Auto-trigger IGDB time-to-beat backfill the first time userStatisticsSummary
+# runs after a container start, so the homepage games hours don't show 0 until
+# the user clicks the manual refresh button.
+COPY patch_auto_refresh_games_on_stats.js /tmp/patch_auto_refresh_games_on_stats.js
+RUN node /tmp/patch_auto_refresh_games_on_stats.js
+
 # Admin endpoint POST /api/refresh-game-runtimes — bulk-fetch IGDB time-to-beat
 # for every existing video_game (without waiting on the 24h refresh cycle).
 COPY patch_refresh_game_runtimes.js /tmp/patch_refresh_game_runtimes.js
