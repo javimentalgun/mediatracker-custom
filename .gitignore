@@ -1,0 +1,28 @@
+# Data + state should never be committed
+data.db*
+backups/
+*.uploaded
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Secrets (just in case someone drops them here)
+.env
+.env.*
+!.env.example
+secrets.json
+client_secret*.json
+
+# Local docker-compose overrides — the user's real compose file lives outside this dir
+docker-compose.local.yml
+docker-compose.override.yml
+
+# Personal project journal — kept locally, not for public consumption
+TASKS.md

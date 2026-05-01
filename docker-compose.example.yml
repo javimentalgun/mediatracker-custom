@@ -1,0 +1,36 @@
+# Example docker-compose for mediatracker-custom.
+# Copy this to your real compose file and fill in the env vars.
+#
+# Required: nothing — Jellyfin and YouTube OAuth are optional.
+# All secrets below should ideally come from a `.env` file (not committed).
+
+services:
+  mediatracker:
+    build: .   # path to this repo (the mediatracker-build dir)
+    image: mediatracker-custom:latest
+    container_name: mediatracker
+    restart: unless-stopped
+    ports:
+      - "7481:7481"
+    volumes:
+      # Persistent data — /storage/data.db lives here.
+      - ./mediatracker-data:/storage
+      # Image cache — bind-mounted so MT-served images survive container rebuilds.
+      - ./mediatracker-assets:/assets
+    environment:
+      # --- Jellyfin integration (optional) ---
+      # If set, MT can sync seen status with Jellyfin and show "Available on Jellyfin" badges.
+      # Leave unset to disable the entire Jellyfin section.
+      # JELLYFIN_URL: "http://jellyfin:8096"           # internal docker URL
+      # JELLYFIN_PUBLIC_URL: "https://jellyfin.example.com"  # for "Play in Jellyfin" buttons
+      # JELLYFIN_API_KEY: "<your-jellyfin-api-key>"
+      # JELLYFIN_USER_ID: "<your-jellyfin-user-id>"
+      # JELLYFIN_REVERSE_SYNC: "true"                  # MT-mark-seen → also mark in Jellyfin
+
+      # --- YouTube OAuth (optional, per-user) ---
+      # Lets users link their Google account in /youtube to auto-import their subscriptions.
+      # Set up: console.cloud.google.com → enable YouTube Data API v3 → create OAuth client
+      # → add the redirect URI below to its allowlist.
+      # GOOGLE_CLIENT_ID: "<your-client-id>.apps.googleusercontent.com"
+      # GOOGLE_CLIENT_SECRET: "<your-client-secret>"
+      # GOOGLE_REDIRECT_URI: "https://your-mt-host.example.com/api/youtube/oauth/callback"
