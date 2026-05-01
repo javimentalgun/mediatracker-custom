@@ -380,6 +380,17 @@ RUN node /tmp/patch_silence_episode_dupes.js
 COPY patch_skip_startup_metadata.js /tmp/patch_skip_startup_metadata.js
 RUN node /tmp/patch_skip_startup_metadata.js
 
+# IGDB time-to-beat: fetch the `completely` (max) field for each game during
+# metadata refresh and store as mediaItem.runtime in minutes. Used by the homepage
+# summary's video_game block so total time = sum of distinct games' max time-to-beat.
+COPY patch_igdb_time_to_beat.js /tmp/patch_igdb_time_to_beat.js
+RUN node /tmp/patch_igdb_time_to_beat.js
+
+# Stats endpoint: for video_game, replace SUM(seen.duration) with
+# SUM(DISTINCT mediaItem.runtime) so re-playing a 100h game doesn't double-count.
+COPY patch_stats_distinct_game_runtime.js /tmp/patch_stats_distinct_game_runtime.js
+RUN node /tmp/patch_stats_distinct_game_runtime.js
+
 # Prevent Cloudflare and browsers from caching /sw.js for a year. The default
 # .js Cache-Control: max-age=31536000 was making CF serve a stale SW that pinned
 # users to an old bundle even after rebuilds.
@@ -478,6 +489,14 @@ RUN node /tmp/patch_youtube_oauth_controller.js
 COPY patch_youtube_oauth_routes.js /tmp/patch_youtube_oauth_routes.js
 RUN node /tmp/patch_youtube_oauth_routes.js
 
+# Per-user "marked as watched" tracking for YouTube videos. Backend uses the
+# user's OAuth access token to resolve video duration via YouTube Data API v3.
+COPY patch_youtube_watched_controller.js /tmp/patch_youtube_watched_controller.js
+RUN node /tmp/patch_youtube_watched_controller.js
+
+COPY patch_youtube_watched_routes.js /tmp/patch_youtube_watched_routes.js
+RUN node /tmp/patch_youtube_watched_routes.js
+
 COPY patch_youtube_frontend.js /tmp/patch_youtube_frontend.js
 RUN node /tmp/patch_youtube_frontend.js
 
@@ -491,6 +510,19 @@ RUN node /tmp/patch_i18n_custom.js
 # even though our patches change it. MUST be AFTER all patches that modify the bundle —
 # otherwise the hash reflects only partial content and CF keeps serving the old version
 # even though our later patches changed the file.
+# Homepage summary: drop audiolibros block (replaced by YouTube watch-time block below).
+COPY patch_homepage_remove_audiobooks.js /tmp/patch_homepage_remove_audiobooks.js
+RUN node /tmp/patch_homepage_remove_audiobooks.js
+
+# Homepage summary: YouTube block ("X videos · Yh viewing"). Mounts in the slot the
+# audiolibros block used to occupy. Must run AFTER patch_homepage_remove_audiobooks.js.
+COPY patch_homepage_youtube_block.js /tmp/patch_homepage_youtube_block.js
+RUN node /tmp/patch_homepage_youtube_block.js
+
+# Homepage summary games block: replace "(N plays)" with "(Xh)" using duration field.
+COPY patch_homepage_games_hours.js /tmp/patch_homepage_games_hours.js
+RUN node /tmp/patch_homepage_games_hours.js
+
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js
 RUN node /tmp/patch_background_colors.js
