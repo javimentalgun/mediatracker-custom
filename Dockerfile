@@ -536,9 +536,19 @@ RUN node /tmp/patch_refresh_game_runtimes_frontend.js
 COPY patch_rename_inprogress_to_pendiente.js /tmp/patch_rename_inprogress_to_pendiente.js
 RUN node /tmp/patch_rename_inprogress_to_pendiente.js
 
+# Pendiente page: replace _GamesSection (3 sub-dropdowns) with a single
+# onlyWithProgress section so games match the layout of movies/tv/books.
+COPY patch_pendiente_games_consistent.js /tmp/patch_pendiente_games_consistent.js
+RUN node /tmp/patch_pendiente_games_consistent.js
+
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js
 RUN node /tmp/patch_background_colors.js
+
+# Content-hash the CSS (busts long-lived browser/CF cache when CSS changes).
+# Must run after any patch that modifies the CSS (background_colors).
+COPY patch_css_rename.js /tmp/patch_css_rename.js
+RUN node /tmp/patch_css_rename.js
 
 COPY patch_bundle_rename.js /tmp/patch_bundle_rename.js
 RUN node /tmp/patch_bundle_rename.js
