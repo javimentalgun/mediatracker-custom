@@ -5,31 +5,35 @@ const fs = require('fs');
   const p = '/app/build/controllers/item.js';
   let c = fs.readFileSync(p, 'utf8');
 
+  // Replace env reads with helper calls FIRST, then inject the helper. Doing it
+  // in the other order would also rewrite `process.env.JELLYFIN_URL` *inside*
+  // the helper itself → infinite recursion (the v0.1.7 bug). The helper aliases
+  // `process.env` as `_e` so the regex below also can't match its body on re-runs.
+  c = c.replace(/process\.env\.JELLYFIN_API_KEY/g, '_jfCfg().apiKey');
+  c = c.replace(/process\.env\.JELLYFIN_URL/g, '_jfCfg().url');
+  c = c.replace(/process\.env\.JELLYFIN_USER_ID/g, '_jfCfg().userId');
+  c = c.replace(/process\.env\.JELLYFIN_PUBLIC_URL/g, '_jfCfg().publicUrl');
+
   if (!c.includes('function _jfCfg()')) {
     // Sync read of /storage/jellyfin-config.json on each call. File overrides env.
     // No caching — file is tiny and write-frequency is essentially zero.
     const helper =
       "\nfunction _jfCfg() {\n" +
+      "  const _e = process.env;\n" +
       "  let f = {};\n" +
       "  try { f = JSON.parse(require('fs').readFileSync('/storage/jellyfin-config.json', 'utf8')); } catch (_) {}\n" +
       "  return {\n" +
-      "    url: f.url || process.env.JELLYFIN_URL || '',\n" +
-      "    apiKey: f.apiKey || process.env.JELLYFIN_API_KEY || '',\n" +
-      "    userId: f.userId || process.env.JELLYFIN_USER_ID || '',\n" +
-      "    publicUrl: f.publicUrl || process.env.JELLYFIN_PUBLIC_URL || '',\n" +
-      "    reverseSync: (f.reverseSync !== undefined ? !!f.reverseSync : process.env.JELLYFIN_REVERSE_SYNC === 'true'),\n" +
+      "    url: f.url || _e.JELLYFIN_URL || '',\n" +
+      "    apiKey: f.apiKey || _e.JELLYFIN_API_KEY || '',\n" +
+      "    userId: f.userId || _e.JELLYFIN_USER_ID || '',\n" +
+      "    publicUrl: f.publicUrl || _e.JELLYFIN_PUBLIC_URL || '',\n" +
+      "    reverseSync: (f.reverseSync !== undefined ? !!f.reverseSync : _e.JELLYFIN_REVERSE_SYNC === 'true'),\n" +
       "  };\n" +
       "}\n";
     const classAnchor = 'class MediaItemController';
     if (!c.includes(classAnchor)) { console.error('jellyfin runtime config: class anchor not found in item.js'); process.exit(1); }
     c = c.replace(classAnchor, helper + '\n' + classAnchor);
   }
-
-  // Idempotent: replacing already-replaced text is a no-op.
-  c = c.replace(/process\.env\.JELLYFIN_API_KEY/g, '_jfCfg().apiKey');
-  c = c.replace(/process\.env\.JELLYFIN_URL/g, '_jfCfg().url');
-  c = c.replace(/process\.env\.JELLYFIN_USER_ID/g, '_jfCfg().userId');
-  c = c.replace(/process\.env\.JELLYFIN_PUBLIC_URL/g, '_jfCfg().publicUrl');
 
   // Add jellyfinGetConfig / jellyfinSaveConfig methods. Both admin-gated via jellyfinIsAdmin
   // (installed by patch_jellyfin_admin_only.js, which must run before this patch).
@@ -83,30 +87,32 @@ const fs = require('fs');
   const p = '/app/build/controllers/seen.js';
   let c = fs.readFileSync(p, 'utf8');
 
+  // Same ordering as item.js: rewrite env reads first, then inject the helper
+  // (which uses the `_e` alias so its own body never matches the regex).
+  c = c.replace("if (process.env.JELLYFIN_REVERSE_SYNC !== 'true') return;", "if (!_jfCfg().reverseSync) return;");
+  c = c.replace(/process\.env\.JELLYFIN_API_KEY/g, '_jfCfg().apiKey');
+  c = c.replace(/process\.env\.JELLYFIN_URL/g, '_jfCfg().url');
+  c = c.replace(/process\.env\.JELLYFIN_USER_ID/g, '_jfCfg().userId');
+  c = c.replace(/process\.env\.JELLYFIN_PUBLIC_URL/g, '_jfCfg().publicUrl');
+
   if (!c.includes('function _jfCfg()')) {
     const helper =
       "\nfunction _jfCfg() {\n" +
+      "  const _e = process.env;\n" +
       "  let f = {};\n" +
       "  try { f = JSON.parse(require('fs').readFileSync('/storage/jellyfin-config.json', 'utf8')); } catch (_) {}\n" +
       "  return {\n" +
-      "    url: f.url || process.env.JELLYFIN_URL || '',\n" +
-      "    apiKey: f.apiKey || process.env.JELLYFIN_API_KEY || '',\n" +
-      "    userId: f.userId || process.env.JELLYFIN_USER_ID || '',\n" +
-      "    publicUrl: f.publicUrl || process.env.JELLYFIN_PUBLIC_URL || '',\n" +
-      "    reverseSync: (f.reverseSync !== undefined ? !!f.reverseSync : process.env.JELLYFIN_REVERSE_SYNC === 'true'),\n" +
+      "    url: f.url || _e.JELLYFIN_URL || '',\n" +
+      "    apiKey: f.apiKey || _e.JELLYFIN_API_KEY || '',\n" +
+      "    userId: f.userId || _e.JELLYFIN_USER_ID || '',\n" +
+      "    publicUrl: f.publicUrl || _e.JELLYFIN_PUBLIC_URL || '',\n" +
+      "    reverseSync: (f.reverseSync !== undefined ? !!f.reverseSync : _e.JELLYFIN_REVERSE_SYNC === 'true'),\n" +
       "  };\n" +
       "}\n";
     const anchor = 'exports.SeenController = void 0;';
     if (!c.includes(anchor)) { console.error('jellyfin runtime config: seen.js anchor not found'); process.exit(1); }
     c = c.replace(anchor, anchor + helper);
   }
-
-  // Reverse-sync gate: was JELLYFIN_REVERSE_SYNC=true env, now from merged config.
-  c = c.replace("if (process.env.JELLYFIN_REVERSE_SYNC !== 'true') return;", "if (!_jfCfg().reverseSync) return;");
-  c = c.replace(/process\.env\.JELLYFIN_API_KEY/g, '_jfCfg().apiKey');
-  c = c.replace(/process\.env\.JELLYFIN_URL/g, '_jfCfg().url');
-  c = c.replace(/process\.env\.JELLYFIN_USER_ID/g, '_jfCfg().userId');
-  c = c.replace(/process\.env\.JELLYFIN_PUBLIC_URL/g, '_jfCfg().publicUrl');
 
   fs.writeFileSync(p, c);
   console.log('jellyfin runtime config: seen.js patched');

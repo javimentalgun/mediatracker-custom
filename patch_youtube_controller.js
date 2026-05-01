@@ -137,7 +137,9 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
             });
           }
         }
-        return entries;
+        // Cap per-channel to the 4 most-recent videos so the feed doesn't drown in
+        // one prolific channel's uploads.
+        return entries.sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 4);
       } catch (e) { return []; }
     }));
     const videos = [].concat(...results).sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 100);

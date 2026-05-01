@@ -70,18 +70,36 @@ const method = `  _ytParseDuration = (iso) => {
       return;
     }
     let durationSeconds = 0;
+    // Try OAuth-based YouTube Data API first (more reliable, has rate limits but
+    // returns clean ISO 8601 duration). Fall back to scraping the watch page for
+    // \`lengthSeconds\` so users without an OAuth-linked Google account can still
+    // use the feature.
+    let oauthErr = null;
     try {
       const accessToken = await this._ytRefreshToken(data, file);
       const r = await fetch('https://www.googleapis.com/youtube/v3/videos?id=' + encodeURIComponent(videoId) + '&part=contentDetails', {
         headers: { Authorization: 'Bearer ' + accessToken }
       });
       const j = await r.json();
-      if (j.error) { res.status(400).json({ error: 'YouTube API: ' + (j.error.message || JSON.stringify(j.error)) }); return; }
+      if (j.error) throw new Error('YouTube API: ' + (j.error.message || JSON.stringify(j.error)));
       const item = (j.items || [])[0];
-      if (!item) { res.status(404).json({ error: 'video no encontrado en YouTube' }); return; }
+      if (!item) throw new Error('video no encontrado en YouTube');
       durationSeconds = this._ytParseDuration(item.contentDetails && item.contentDetails.duration);
     } catch (e) {
-      res.status(400).json({ error: e.message });
+      oauthErr = e.message;
+    }
+    if (!durationSeconds) {
+      try {
+        const r = await fetch('https://www.youtube.com/watch?v=' + encodeURIComponent(videoId), {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' }
+        });
+        const html = await r.text();
+        const m = html.match(/\"lengthSeconds\":\"(\\d+)\"/);
+        if (m) durationSeconds = Number(m[1]);
+      } catch (_) {}
+    }
+    if (!durationSeconds) {
+      res.status(400).json({ error: 'No se pudo obtener la duraci\\u00f3n del v\\u00eddeo' + (oauthErr ? ' (OAuth: ' + oauthErr + ')' : '') });
       return;
     }
     data.watched.push({
