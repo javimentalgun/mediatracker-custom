@@ -418,6 +418,13 @@ RUN node /tmp/patch_jellyfin_reverse.js
 COPY patch_jellyfin_admin_only.js /tmp/patch_jellyfin_admin_only.js
 RUN node /tmp/patch_jellyfin_admin_only.js
 
+# Move Jellyfin URL/API key/userId out of env vars and into /storage/jellyfin-config.json
+# so the integration can be configured from the UI (Settings → Backup → Jellyfin).
+# Adds GET/PUT /api/jellyfin/config (admin-only). Must run after admin_only so the
+# helper jellyfinIsAdmin is already installed.
+COPY patch_jellyfin_runtime_config.js /tmp/patch_jellyfin_runtime_config.js
+RUN node /tmp/patch_jellyfin_runtime_config.js
+
 # Gate backup/restore/import/export/dupes/cleanup to admin users only.
 # Otherwise a non-admin could download the data.db with all users' data.
 COPY patch_admin_only_endpoints.js /tmp/patch_admin_only_endpoints.js
@@ -484,6 +491,10 @@ RUN node /tmp/patch_i18n_custom.js
 # even though our patches change it. MUST be AFTER all patches that modify the bundle —
 # otherwise the hash reflects only partial content and CF keeps serving the old version
 # even though our later patches changed the file.
+# Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
+COPY patch_background_colors.js /tmp/patch_background_colors.js
+RUN node /tmp/patch_background_colors.js
+
 COPY patch_bundle_rename.js /tmp/patch_bundle_rename.js
 RUN node /tmp/patch_bundle_rename.js
 
