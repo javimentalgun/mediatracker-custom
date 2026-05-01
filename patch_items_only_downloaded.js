@@ -21,11 +21,23 @@ if (q.includes('onlyDownloaded')) {
   process.exit(0);
 }
 
-// Add to args destructure
-q = q.replace(
-  "onlyWithProgress\n  } = args;",
-  "onlyWithProgress,\n    onlyDownloaded\n  } = args;"
-);
+// Add to args destructure. Order-independent: if patch_seen_kind_wiring.js already
+// extended the destructure with onlyPlayed/onlyWatched, the original anchor won't
+// match — fall back to inserting after onlyWatched. Otherwise insert after onlyWithProgress.
+if (q.includes("onlyWatched\n  } = args;")) {
+  q = q.replace(
+    "onlyWatched\n  } = args;",
+    "onlyWatched,\n    onlyDownloaded\n  } = args;"
+  );
+} else if (q.includes("onlyWithProgress\n  } = args;")) {
+  q = q.replace(
+    "onlyWithProgress\n  } = args;",
+    "onlyWithProgress,\n    onlyDownloaded\n  } = args;"
+  );
+} else {
+  console.error('items only-downloaded: query destructure anchor not found');
+  process.exit(1);
+}
 
 // Add filter clause near the other filter blocks. Insert after onlyWithProgress block.
 const filterAnchor = "if (onlyWithProgress) {";

@@ -46,14 +46,24 @@ const fs = require('fs');
   // Guard must check the destructure specifically — `onlyPlayed` alone also appears
   // in the count fast-path injected by patch_items_simple_count.js, which would
   // make this whole block a no-op even though the args destructure is missing.
-  if (/onlyDownloaded,\s*onlyPlayed,\s*onlyWatched\s*\}\s*=\s*args;/.test(c)) {
+  if (/onlyPlayed,\s*onlyWatched\s*\}\s*=\s*args;/.test(c)) {
     console.log('seen kind wiring: items.js already supports onlyPlayed/onlyWatched');
   } else {
     // Strip prior onlyKind injection if it exists
     c = c.replace(",\n    onlyKind", "");
     c = c.replace(/    if \(onlyKind === 'played' \|\| onlyKind === 'watched'\) \{[\s\S]*?\}\n    /, '    ');
-    // Add to args destructure
-    c = c.replace("onlyDownloaded\n  } = args;", "onlyDownloaded,\n    onlyPlayed,\n    onlyWatched\n  } = args;");
+    // Add to args destructure. Order-independent: handles whichever variable
+    // happens to be last when this patch runs (onlyDownloaded if items_only_downloaded
+    // ran first, otherwise onlyWithProgress). Both anchors live inside getItemsKnexSql
+    // — the other `} = args;` in the file is `getItemsKnex`'s `{ page }` destructure.
+    if (c.includes("onlyDownloaded\n  } = args;")) {
+      c = c.replace("onlyDownloaded\n  } = args;", "onlyDownloaded,\n    onlyPlayed,\n    onlyWatched\n  } = args;");
+    } else if (c.includes("onlyWithProgress\n  } = args;")) {
+      c = c.replace("onlyWithProgress\n  } = args;", "onlyWithProgress,\n    onlyPlayed,\n    onlyWatched\n  } = args;");
+    } else {
+      console.error('seen kind wiring: items.js destructure anchor not found');
+      process.exit(1);
+    }
     // Add filter clauses near onlySeenItems (truthy on string|bool|number)
     const anchor = "if (onlySeenItems === true || onlySeenItems === 'true' || onlySeenItems === 1) {";
     const inject =
