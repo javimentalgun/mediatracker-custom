@@ -547,6 +547,31 @@ RUN node /tmp/patch_rename_inprogress_to_pendiente.js
 COPY patch_pendiente_games_consistent.js /tmp/patch_pendiente_games_consistent.js
 RUN node /tmp/patch_pendiente_games_consistent.js
 
+# --- Dropped / Abandonados feature ---
+# Per-user "stopped consuming on purpose" flag with its own page + hamburger entry.
+# Migration creates the abandoned table; controller exposes 3 endpoints; filter
+# extends items query with excludeAbandoned/onlyAbandoned; frontend adds toggle
+# button on detail pages, the /abandonados page, and the menu entry.
+COPY patch_abandoned_migration.js /tmp/patch_abandoned_migration.js
+RUN node /tmp/patch_abandoned_migration.js
+
+# One-shot: nuke video_game.runtime values > 500h so the new IGDB cap takes
+# effect on previously-cached endless games (Star Citizen, MMOs, etc).
+COPY patch_reset_outlier_game_runtimes.js /tmp/patch_reset_outlier_game_runtimes.js
+RUN node /tmp/patch_reset_outlier_game_runtimes.js
+
+COPY patch_abandoned_controller.js /tmp/patch_abandoned_controller.js
+RUN node /tmp/patch_abandoned_controller.js
+
+COPY patch_abandoned_routes.js /tmp/patch_abandoned_routes.js
+RUN node /tmp/patch_abandoned_routes.js
+
+COPY patch_abandoned_filter.js /tmp/patch_abandoned_filter.js
+RUN node /tmp/patch_abandoned_filter.js
+
+COPY patch_abandoned_frontend.js /tmp/patch_abandoned_frontend.js
+RUN node /tmp/patch_abandoned_frontend.js
+
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js
 RUN node /tmp/patch_background_colors.js

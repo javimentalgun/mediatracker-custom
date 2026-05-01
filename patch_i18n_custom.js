@@ -16,6 +16,9 @@ const customKeys = {
   // === Sections / pages ===
   'Downloaded':                   { es: 'Descargado', pt: 'Baixado', fr: 'Téléchargé', de: 'Heruntergeladen', da: 'Hentet', ko: '다운로드됨' },
   'Watchlist':                    { es: 'Lista de seguimiento', pt: 'Lista para assistir', fr: 'À voir', de: 'Beobachtungsliste', da: 'Watchlist', ko: '시청 목록' },
+  'Dropped':                      { es: 'Abandonados', pt: 'Abandonados', fr: 'Abandonnés', de: 'Aufgegeben', da: 'Opgivet', ko: '중단' },
+  'Mark as dropped':              { es: 'Marcar como abandonada', pt: 'Marcar como abandonada', fr: 'Marquer comme abandonné', de: 'Als aufgegeben markieren', da: 'Markér som opgivet', ko: '중단으로 표시' },
+  'Resume':                       { es: 'Reanudar', pt: 'Retomar', fr: 'Reprendre', de: 'Fortsetzen', da: 'Genoptag', ko: '재개' },
   'Backup':                       { es: 'Backup', pt: 'Backup', fr: 'Sauvegarde', de: 'Sicherung', da: 'Sikkerhedskopi', ko: '백업' },
   'Movies':                       { es: 'Películas', pt: 'Filmes', fr: 'Films', de: 'Filme', da: 'Film', ko: '영화' },
   'Tv':                           { es: 'Series', pt: 'Séries', fr: 'Séries', de: 'Serien', da: 'Serier', ko: 'TV' },

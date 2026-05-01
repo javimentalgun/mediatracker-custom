@@ -25,8 +25,13 @@ const helperMethod =
   "      const res = await this.get('game_time_to_beats', `fields hastily,normally,completely; where game_id = ${gameId};`);\n" +
   "      if (!res || !res.length) return null;\n" +
   "      const t = res[0];\n" +
-  "      const seconds = t.completely || t.normally || t.hastily || 0;\n" +
-  "      if (!seconds) return null;\n" +
+  "      // 500h cap: IGDB stores absurd 'completely' values for endless games\n" +
+  "      // (Star Citizen → 100,000h, MMOs → years). Anything > 500h is treated\n" +
+  "      // as no meaningful time-to-beat data, so the homepage total stays sane.\n" +
+  "      const CAP_SECONDS = 500 * 3600;\n" +
+  "      const candidates = [t.completely, t.normally, t.hastily].filter(s => s && s > 0 && s <= CAP_SECONDS);\n" +
+  "      if (!candidates.length) return null;\n" +
+  "      const seconds = Math.max.apply(null, candidates);\n" +
   "      return Math.round(seconds / 60);\n" +
   "    } catch (e) {\n" +
   "      return null;\n" +

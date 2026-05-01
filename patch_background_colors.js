@@ -4,7 +4,8 @@ const child = require('child_process');
 
 // Override page background:
 //   light mode → "cáscara de huevo" (#F0EAD6)
-//   dark mode  → black (#000000)
+//   dark mode  → near-black (#121212) — slightly lifted off pure black so OLED
+//                contrast doesn't crush text rendering.
 // Tailwind already emits `body { background-color: rgb(64 64 64) }` and
 // `.dark body { … }` with the same color (perma-dark default). We append a
 // higher-specificity rule at the end of the CSS to win without !important.
@@ -17,7 +18,7 @@ if (css.includes(marker)) {
 } else {
   const override = '\n' + marker + '\n' +
     'html body{background-color:#F0EAD6;}\n' +
-    'html.dark body{background-color:#000000;}\n';
+    'html.dark body{background-color:#121212;}\n';
   css = css + override;
   fs.writeFileSync(cssPath, css);
   // Re-emit .gz / .br variants so the static server keeps serving fresh bytes.
