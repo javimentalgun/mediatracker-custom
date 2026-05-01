@@ -6,7 +6,10 @@ const fs = require('fs');
   let c = fs.readFileSync(path, 'utf8');
 
   // Helper: returns true iff the caller is an admin in MT's user table.
-  if (!c.includes('jellyfinIsAdmin')) {
+  // Check the *definition* pattern, not the bare name — earlier patches that
+  // call `this.jellyfinIsAdmin(...)` would otherwise short-circuit this guard
+  // and leave the helper undefined (every gated endpoint throws TypeError).
+  if (!c.includes('jellyfinIsAdmin = async')) {
     const helper =
       "  jellyfinIsAdmin = async (req, res) => {\n" +
       "    const userId = Number(req.user);\n" +

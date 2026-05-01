@@ -46,8 +46,10 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
           res.status(400).json({ error: 'URL inválida' }); return;
         }
       }
+      let fetchStatus = null;
       try {
         const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        fetchStatus = r.status;
         const html = await r.text();
         // Prefer the canonical link (always points to the page's own channel)
         const canon = html.match(/<link rel="canonical" href="https?:\\/\\/www\\.youtube\\.com\\/channel\\/(UC[A-Za-z0-9_-]{20,24})"/);
@@ -59,6 +61,9 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
         const tm = html.match(/<title>([^<]+) - YouTube<\\/title>/);
         if (tm) name = tm[1];
       } catch (_) {}
+      if (!channelId && fetchStatus === 404) {
+        res.status(404).json({ error: 'El canal o el handle no existe en YouTube (404). Comprueba el @handle o pega el ID UCxxxx.' }); return;
+      }
     }
     if (!channelId) { res.status(400).json({ error: 'No se pudo resolver el canal. Pega el ID UCxxxx o la URL completa.' }); return; }
     if (!name) {
