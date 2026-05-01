@@ -532,6 +532,10 @@ RUN node /tmp/patch_homepage_games_hours.js
 COPY patch_refresh_game_runtimes_frontend.js /tmp/patch_refresh_game_runtimes_frontend.js
 RUN node /tmp/patch_refresh_game_runtimes_frontend.js
 
+# Rename "En progreso" / "In progress" → "Pendiente" (page heading + ES i18n).
+COPY patch_rename_inprogress_to_pendiente.js /tmp/patch_rename_inprogress_to_pendiente.js
+RUN node /tmp/patch_rename_inprogress_to_pendiente.js
+
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js
 RUN node /tmp/patch_background_colors.js
