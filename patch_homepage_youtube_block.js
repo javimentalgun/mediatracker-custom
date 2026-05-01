@@ -18,17 +18,18 @@ if (c.includes(marker)) {
 }
 
 // Component definition. Cp is the existing milliseconds-to-duration formatter,
-// available globally in the bundle scope.
+// available globally in the bundle scope. Renders even when the user has marked
+// 0 videos so they discover the feature exists (the YT page is where they mark).
 const ytHomeDef = '_YTHome=function(){' +
   'var _s=r.useState(null),s=_s[0],setS=_s[1];' +
-  'r.useEffect(function(){fetch("/api/youtube/watched-stats",{credentials:"same-origin"}).then(function(r){return r.json()}).then(setS).catch(function(){})},[]);' +
-  'if(!s||!s.count)return null;' +
+  'r.useEffect(function(){fetch("/api/youtube/watched-stats",{credentials:"same-origin"}).then(function(r){return r.json()}).then(setS).catch(function(){setS({count:0,totalSeconds:0})})},[]);' +
+  'if(!s)return null;' +
   'var totalMinutes=Math.round((s.totalSeconds||0)/60);' +
   'return r.createElement("div",{className:"mb-6 mr-6"},' +
     'r.createElement("div",{className:"text-lg font-bold"},"YouTube"),' +
-    'totalMinutes>0?r.createElement("div",{className:"whitespace-nowrap"},' +
+    'r.createElement("div",{className:"whitespace-nowrap"},' +
       'r.createElement("b",null,r.createElement(Cp,{milliseconds:totalMinutes*60*1e3}))," viendo"' +
-    '):null,' +
+    '),' +
     'r.createElement("div",null,r.createElement("b",null,s.count)," videos")' +
   ')' +
 '},';

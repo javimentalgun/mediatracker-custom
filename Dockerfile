@@ -391,6 +391,11 @@ RUN node /tmp/patch_igdb_time_to_beat.js
 COPY patch_stats_distinct_game_runtime.js /tmp/patch_stats_distinct_game_runtime.js
 RUN node /tmp/patch_stats_distinct_game_runtime.js
 
+# Admin endpoint POST /api/refresh-game-runtimes — bulk-fetch IGDB time-to-beat
+# for every existing video_game (without waiting on the 24h refresh cycle).
+COPY patch_refresh_game_runtimes.js /tmp/patch_refresh_game_runtimes.js
+RUN node /tmp/patch_refresh_game_runtimes.js
+
 # Prevent Cloudflare and browsers from caching /sw.js for a year. The default
 # .js Cache-Control: max-age=31536000 was making CF serve a stale SW that pinned
 # users to an old bundle even after rebuilds.
@@ -522,6 +527,10 @@ RUN node /tmp/patch_homepage_youtube_block.js
 # Homepage summary games block: replace "(N plays)" with "(Xh)" using duration field.
 COPY patch_homepage_games_hours.js /tmp/patch_homepage_games_hours.js
 RUN node /tmp/patch_homepage_games_hours.js
+
+# Frontend button on Backup page to trigger /api/refresh-game-runtimes.
+COPY patch_refresh_game_runtimes_frontend.js /tmp/patch_refresh_game_runtimes_frontend.js
+RUN node /tmp/patch_refresh_game_runtimes_frontend.js
 
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js

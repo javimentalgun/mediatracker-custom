@@ -6,7 +6,7 @@ let c = fs.readFileSync(path, 'utf8');
 //   - server logs at startup ("MediaTracker v0.0.1 escuchando en …")
 //   - the About page (Settings → About → version field)
 // Bump this when you cut a new "release" of your fork.
-const FORK_VERSION = 'v0.1.2';
+const FORK_VERSION = 'v0.1.3';
 
 const old = 'static version = _package.version;';
 const fresh = "static version = '" + FORK_VERSION + "';";
