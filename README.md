@@ -1,7 +1,9 @@
 # mediatracker-custom — patched fork of bonukai/MediaTracker
 
+> Maintained by **javi.mental.gun** — a personal fork. Current release: **v0.1.2**.
+
 Docker image that takes [bonukai/mediatracker](https://github.com/bonukai/MediaTracker) as base
-and applies **114 patches** at build time. Each patch is a small Node.js script that surgically
+and applies **120+ patches** at build time. Each patch is a small Node.js script that surgically
 edits the minified frontend bundle or the compiled backend files inside the upstream image.
 
 This is a personal fork. The patches reflect *one* opinionated set of UX/feature changes; if any
@@ -48,19 +50,45 @@ into 50–200ms on a 38k-item library:
 - Custom progress modal with two parallel "I finished reading / listening" sections
 - About page rebrand
 
-## Quick start
+## Install with Docker
+
+Requirements: Docker Engine 20+ and the Compose v2 plugin (`docker compose`, two words).
 
 ```sh
-git clone <this-repo> mediatracker-build
+# 1. Clone this repo
+git clone https://github.com/jotacomyn-sys/mediatracker-custom.git mediatracker-build
 cd mediatracker-build
+
+# 2. Stage your compose file from the example
 cp docker-compose.example.yml docker-compose.yml
-# edit docker-compose.yml — set env vars (or use a .env file)
+
+# 3. Edit env vars (TMDB_LANG, IGDB_CLIENT_ID/SECRET, optional Jellyfin/YouTube/Google).
+#    You don't NEED Jellyfin or YouTube to start; only TMDB + IGDB are required for
+#    metadata. Jellyfin is configurable from the UI later (Settings → Backup → Jellyfin).
+${EDITOR:-nano} docker-compose.yml
+
+# 4. Build the image (takes ~3-5min the first time, every patch runs in its own
+#    Docker layer so subsequent builds are cached and fast).
 docker compose build mediatracker
+
+# 5. Start
 docker compose up -d mediatracker
+
+# 6. Open http://localhost:7481 — first user to register is admin.
 ```
 
 The first run creates `/storage/data.db` and runs all upstream knex migrations. Subsequent
 restarts are fast.
+
+**Mount points** (from `docker-compose.example.yml`):
+- `./mediatracker:/storage` — SQLite DB, Jellyfin/YouTube config JSONs, backups
+- `./mediatracker-assets:/assets` — TMDB poster cache, sized & resized images
+
+**Healthcheck**: built-in `wget /api/configuration` every 30s.
+
+**Cloudflare Tunnel** (optional, for public access): see `docker-compose.example.yml`
+for the `cloudflared` sidecar pattern. Configure the tunnel via the Cloudflare dashboard
+and pass the token as `TUNNEL_TOKEN` env var.
 
 ## How the patch system works
 
@@ -122,6 +150,10 @@ update the anchor.
 | `DELETE` | `/api/youtube/oauth` | Unlink Google account, revoke tokens |
 | `GET` | `/api/jellyfin/status` | Jellyfin connectivity / last sync stats (admin) |
 | `POST` | `/api/jellyfin/sync` | Sync from Jellyfin → MT (admin) |
+| `GET` `/PUT` | `/api/jellyfin/config` | Read/save Jellyfin URL / API key / userId (admin) |
+| `POST` | `/api/youtube/watched` | Mark a YT video as watched (resolves duration via Data API) |
+| `DELETE` | `/api/youtube/watched/:videoId` | Unmark a watched video |
+| `GET` | `/api/youtube/watched-stats` | Total watched videos + seconds for the user |
 
 ## Backups (host-side)
 
