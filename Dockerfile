@@ -547,6 +547,11 @@ RUN node /tmp/patch_rename_inprogress_to_pendiente.js
 COPY patch_pendiente_games_consistent.js /tmp/patch_pendiente_games_consistent.js
 RUN node /tmp/patch_pendiente_games_consistent.js
 
+# Items-grid filter dropdown: hide the "Just watched"/onlyWatched option for
+# non-game media types (it's only useful on Games where it maps to "Seen").
+COPY patch_filter_seen_games_only.js /tmp/patch_filter_seen_games_only.js
+RUN node /tmp/patch_filter_seen_games_only.js
+
 # --- Dropped / Abandonados feature ---
 # Per-user "stopped consuming on purpose" flag with its own page + hamburger entry.
 # Migration creates the abandoned table; controller exposes 3 endpoints; filter
