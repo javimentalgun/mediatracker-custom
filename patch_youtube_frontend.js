@@ -70,25 +70,8 @@ const compDef = '_YT=function(){' +
   'var formatHours=function(sec){if(!sec)return "0m";var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return (h?h+"h ":"")+m+"m"};' +
   'return r.createElement("div",{className:"p-2"},' +
     'r.createElement("h2",{className:"text-2xl mb-4 px-2"},"YouTube"),' +
-    // OAuth account-link section (always visible)
-    'auth&&r.createElement("div",{className:"mb-3 px-2 flex flex-wrap items-center gap-2"},' +
-      '!auth.connected?' +
-        'r.createElement("button",{onClick:connectOauth,className:"px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded shadow inline-flex items-center gap-2"},' +
-          'r.createElement("i",{className:"material-icons"},"link"),' +
-          'xo._("Link YouTube account")' +
-        '):' +
-        'r.createElement(r.Fragment,null,' +
-          'r.createElement("span",{className:"px-3 py-1 rounded bg-green-700 text-white text-sm inline-flex items-center gap-1"},' +
-            'r.createElement("i",{className:"material-icons text-base"},"check_circle"),' +
-            'xo._("Connected as")+" "+(auth.email||"?")' +
-          '),' +
-          'r.createElement("button",{onClick:syncOauth,disabled:syncBusy,className:"px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 text-white rounded text-sm inline-flex items-center gap-1"},' +
-            'r.createElement("i",{className:"material-icons text-base"},syncBusy?"hourglass_top":"sync"),' +
-            'syncBusy?"...":xo._("Sync my subscriptions")' +
-          '),' +
-          'r.createElement("button",{onClick:disconnectOauth,className:"px-2 py-1 text-sm text-red-500 hover:text-red-700 underline"},xo._("Disconnect"))' +
-        ')' +
-    '),' +
+    // OAuth account-link section moved to /settings/application-tokens
+    // (rendered there via _YTAUTH in patch_credentials_to_tokens.js).
     // Watched stats badge
     'r.createElement("div",{className:"mb-3 px-2 text-sm text-gray-600 dark:text-gray-300"},' +
       'r.createElement("i",{className:"material-icons text-base align-middle mr-1"},"visibility"),' +

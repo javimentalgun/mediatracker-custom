@@ -10,10 +10,16 @@ let c = fs.readFileSync(path, 'utf8');
 // One-shot, idempotent (re-running is fine — it only writes when the value
 // differs). Throttled by IGDB's own request queue (250ms between calls).
 
-if (c.includes('refreshGameRuntimes =')) {
+if (c.includes('refreshGameRuntimes =') && c.includes('refreshGameRuntimeOne =')) {
   console.log('refresh game runtimes: already patched');
   process.exit(0);
 }
+
+// Strip prior versions so re-running this patch picks up new logic.
+['refreshGameRuntimes', 'refreshGameRuntimeOne'].forEach(name => {
+  const re = new RegExp('  ' + name + ' = \\(0, _typescriptRoutesToOpenapiServer\\.createExpressRoute\\)\\(async \\(req, res\\) => \\{[\\s\\S]*?\\n  \\}\\);\\n', 'g');
+  c = c.replace(re, '');
+});
 
 const method =
   "  refreshGameRuntimes = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {\n" +
@@ -36,6 +42,29 @@ const method =
   "      } catch (_) { failed++; }\n" +
   "    }\n" +
   "    res.json({ ok: true, total: games.length, updated, unchanged, missing, failed });\n" +
+  "  });\n" +
+  // Per-game variant: refresh a single video_game's runtime from IGDB.
+  // Any logged-in user can trigger this for an item they care about; the
+  // change writes mediaItem.runtime which is shared across users (same as
+  // upstream's metadata refresh button).
+  "  refreshGameRuntimeOne = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {\n" +
+  "    const userId = Number(req.user);\n" +
+  "    if (!userId) { res.status(401).json({ error: 'unauthenticated' }); return; }\n" +
+  "    const id = Number(req.params.mediaItemId);\n" +
+  "    if (!id) { res.status(400).json({ error: 'mediaItemId requerido' }); return; }\n" +
+  "    const knex = _dbconfig.Database.knex;\n" +
+  "    const { metadataProviders } = require('../metadata/metadataProviders');\n" +
+  "    const igdb = metadataProviders.get('video_game', 'IGDB');\n" +
+  "    if (!igdb) { res.status(500).json({ error: 'IGDB provider not available' }); return; }\n" +
+  "    const g = await knex('mediaItem').where({ id, mediaType: 'video_game' }).whereNotNull('igdbId').first();\n" +
+  "    if (!g) { res.status(404).json({ error: 'game not found or has no igdbId' }); return; }\n" +
+  "    let ttb = null;\n" +
+  "    try { ttb = await igdb.gameTimeToBeat(g.igdbId); }\n" +
+  "    catch (e) { res.status(502).json({ error: 'IGDB error: ' + e.message }); return; }\n" +
+  "    if (!ttb) { res.json({ ok: true, updated: false, reason: 'no time-to-beat from IGDB', runtime: g.runtime }); return; }\n" +
+  "    if (g.runtime === ttb) { res.json({ ok: true, updated: false, reason: 'unchanged', runtime: ttb }); return; }\n" +
+  "    await knex('mediaItem').where('id', id).update({ runtime: ttb });\n" +
+  "    res.json({ ok: true, updated: true, runtime: ttb });\n" +
   "  });\n";
 
 const anchor = '}\nexports.MediaItemController = MediaItemController;';
@@ -47,15 +76,18 @@ console.log('refresh game runtimes: added refreshGameRuntimes endpoint');
 // Register the route
 const routesPath = '/app/build/generated/routes/routes.js';
 let r = fs.readFileSync(routesPath, 'utf8');
-if (r.includes("/api/refresh-game-runtimes'")) {
-  console.log('refresh game runtimes: route already registered');
+if (r.includes("/api/refresh-game-runtimes'") && r.includes("/api/refresh-game-runtime/:mediaItemId'")) {
+  console.log('refresh game runtimes: routes already registered');
 } else {
-  // Anchor on a stable upstream route — patch order with later jellyfin/youtube
-  // route patches doesn't matter this way.
+  // Strip prior versions so re-running picks up the new (per-game) route too.
+  r = r.replace(/router\.post\('\/api\/refresh-game-runtimes?'[^\n]*\n/g, '');
+  r = r.replace(/router\.post\('\/api\/refresh-game-runtime\/:mediaItemId'[^\n]*\n/g, '');
   const routeAnchor = "router.post('/api/catalog/cleanup'";
   if (!r.includes(routeAnchor)) { console.error('refresh game runtimes: route anchor not found'); process.exit(1); }
-  const routeLine = "router.post('/api/refresh-game-runtimes', validatorHandler({}), _MediaItemController.refreshGameRuntimes);\n";
-  r = r.replace(routeAnchor, routeLine + routeAnchor);
+  const routeLines =
+    "router.post('/api/refresh-game-runtimes', validatorHandler({}), _MediaItemController.refreshGameRuntimes);\n" +
+    "router.post('/api/refresh-game-runtime/:mediaItemId', validatorHandler({}), _MediaItemController.refreshGameRuntimeOne);\n";
+  r = r.replace(routeAnchor, routeLines + routeAnchor);
   fs.writeFileSync(routesPath, r);
-  console.log('refresh game runtimes: route registered');
+  console.log('refresh game runtimes: 2 routes registered (bulk + per-game)');
 }

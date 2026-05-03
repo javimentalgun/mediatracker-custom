@@ -18,19 +18,21 @@ if (c.includes(marker)) {
 }
 
 // Component definition. Cp is the existing milliseconds-to-duration formatter,
-// available globally in the bundle scope. Renders even when the user has marked
-// 0 videos so they discover the feature exists (the YT page is where they mark).
-const ytHomeDef = '_YTHome=function(){' +
-  'var _s=r.useState(null),s=_s[0],setS=_s[1];' +
-  'r.useEffect(function(){fetch("/api/youtube/watched-stats",{credentials:"same-origin"}).then(function(r){return r.json()}).then(setS).catch(function(){setS({count:0,totalSeconds:0})})},[]);' +
+// available globally in the bundle scope. Receives stats as a prop from the
+// homepage scope (where `o = useQuery(/api/statistics/summary)`), so it renders
+// in lockstep with the rest of the summary blocks — no separate fetch.
+// patch_youtube_stats_in_summary.js inlines o.youtube into the summary response.
+const ytHomeDef = '_YTHome=function(e){' +
+  'var s=e&&e.stats;' +
   'if(!s)return null;' +
-  'var totalMinutes=Math.round((s.totalSeconds||0)/60);' +
+  'var totalSeconds=Number(s.totalSeconds)||0;' +
+  'var count=Number(s.count)||0;' +
   'return r.createElement("div",{className:"mb-6 mr-6"},' +
     'r.createElement("div",{className:"text-lg font-bold"},"YouTube"),' +
     'r.createElement("div",{className:"whitespace-nowrap"},' +
-      'r.createElement("b",null,r.createElement(Cp,{milliseconds:totalMinutes*60*1e3}))," viendo"' +
+      'r.createElement("b",null,r.createElement(Cp,{milliseconds:totalSeconds*1e3}))," viendo"' +
     '),' +
-    'r.createElement("div",null,r.createElement("b",null,s.count)," videos")' +
+    'r.createElement("div",null,r.createElement("b",null,count)," videos")' +
   ')' +
 '},';
 
@@ -47,9 +49,10 @@ if (c.includes('_YTHome=function(){')) {
 
 // Mount the component as a sibling of the audiobook block. We anchor on the
 // audiobook-removal marker so this patch is order-dependent (must run after
-// patch_homepage_remove_audiobooks.js).
+// patch_homepage_remove_audiobooks.js). Pass `o.youtube` as the `stats` prop —
+// `o` is the homepage scope's summary object (from /api/statistics/summary).
 const mountAnchor = '/*mt-fork:no-audiobook-summary*/false&&';
-const mountPatched = marker + 'r.createElement(_YTHome,null),' + mountAnchor;
+const mountPatched = marker + 'r.createElement(_YTHome,{stats:o.youtube}),' + mountAnchor;
 if (!c.includes(mountAnchor)) {
   console.error('homepage youtube block: mount anchor not found — did patch_homepage_remove_audiobooks.js run first?');
   process.exit(1);

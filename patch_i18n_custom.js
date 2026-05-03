@@ -13,6 +13,30 @@ let c = fs.readFileSync(bundlePath, 'utf8');
 // To extend: add a new key with all 6 translations + use `xo._("Key")` in patches.
 // Documented in STRINGS.md.
 const customKeys = {
+  // === UI language switcher (patch_ui_language_switcher.js) ===
+  'UI language':                  { es: 'Idioma de la interfaz', pt: 'Idioma da interface', fr: "Langue de l'interface", de: 'UI-Sprache', da: 'UI-sprog', ko: 'UI 언어' },
+  'Auto (browser)':               { es: 'Automático (navegador)', pt: 'Automático (navegador)', fr: 'Automatique (navigateur)', de: 'Automatisch (Browser)', da: 'Automatisk (browser)', ko: '자동 (브라우저)' },
+
+  // === Games "Visto" split (patch_games_seen_split.js) ===
+  'Watched and played':           { es: 'Vistos y jugados', pt: 'Vistos e jogados', fr: 'Vus et joués', de: 'Gesehen und gespielt', da: 'Set og spillet', ko: '시청 및 플레이' },
+
+  // === Actively in-progress button (patch_actively_in_progress_frontend.js) ===
+  'Mark as in progress':          { es: 'Marcar como en proceso', pt: 'Marcar como em curso', fr: "Marquer comme en cours", de: 'Als laufend markieren', da: 'Markér som i gang', ko: '진행 중으로 표시' },
+  'Stop being in progress':       { es: 'Quitar de en proceso', pt: 'Tirar de em curso', fr: 'Retirer de en cours', de: 'Aus „laufend" entfernen', da: 'Fjern fra i gang', ko: '진행 중에서 제거' },
+
+  // === Mark as seen / watched button (patch_mark_watched_button.js) ===
+  'Mark as seen':                 { es: 'Marcar como visto', pt: 'Marcar como visto', fr: 'Marquer comme vu', de: 'Als gesehen markieren', da: 'Markér som set', ko: '시청함으로 표시' },
+  'Stop being seen':              { es: 'Quitar de visto', pt: 'Tirar de visto', fr: 'Retirer de vu', de: 'Aus „gesehen" entfernen', da: 'Fjern fra set', ko: '시청함에서 제거' },
+
+  // === Hamburger menu tooltips (patch_menu_split.js _DD) ===
+  'In progress menu desc':        { es: 'Lo que estás viendo y lo que ya está disponible para empezar (estrenado y en watchlist)', pt: 'O que estás a ver e o que já está disponível para começar (lançado e na watchlist)', fr: 'Ce que vous regardez et ce qui est désormais disponible (sorti et dans la watchlist)', de: 'Was du gerade siehst und was jetzt verfügbar ist (erschienen und auf der Watchlist)', da: 'Hvad du ser nu og hvad der er klar til at starte (udgivet og på watchlist)', ko: '보고 있는 항목과 이미 시작할 수 있는 항목 (출시되어 watchlist에 있음)' },
+  'Upcoming menu desc':           { es: 'Próximas releases en tu biblioteca (capítulos, pelis, juegos, libros)', pt: 'Próximos lançamentos na tua biblioteca (episódios, filmes, jogos, livros)', fr: 'Prochaines sorties dans votre bibliothèque (épisodes, films, jeux, livres)', de: 'Kommende Veröffentlichungen in deiner Bibliothek (Folgen, Filme, Spiele, Bücher)', da: 'Kommende udgivelser i dit bibliotek (afsnit, film, spil, bøger)', ko: '라이브러리의 곧 출시될 항목 (에피소드/영화/게임/책)' },
+  'Watchlist menu desc':          { es: 'Lo que quieres ver, jugar o leer en el futuro', pt: 'O que queres ver, jogar ou ler no futuro', fr: 'Ce que vous voulez regarder, jouer ou lire à l\'avenir', de: 'Was du in Zukunft sehen, spielen oder lesen willst', da: 'Det du gerne vil se, spille eller læse i fremtiden', ko: '앞으로 보거나 플레이하거나 읽고 싶은 항목' },
+  'Calendar menu desc':           { es: 'Calendario con las fechas de salida de tu biblioteca', pt: 'Calendário com as datas de lançamento da tua biblioteca', fr: 'Calendrier avec les dates de sortie de votre bibliothèque', de: 'Kalender mit den Veröffentlichungsterminen deiner Bibliothek', da: 'Kalender med udgivelsesdatoer fra dit bibliotek', ko: '라이브러리 출시일 캘린더' },
+  'Lists menu desc':              { es: 'Tus listas personalizadas', pt: 'As tuas listas personalizadas', fr: 'Vos listes personnalisées', de: 'Deine eigenen Listen', da: 'Dine egne lister', ko: '내 사용자 지정 목록' },
+  'Dropped menu desc':            { es: 'Items que has marcado como abandonados', pt: 'Itens que marcaste como abandonados', fr: 'Éléments que vous avez marqués comme abandonnés', de: 'Einträge, die du als aufgegeben markiert hast', da: 'Elementer du har markeret som opgivet', ko: '중단으로 표시한 항목' },
+  'Downloaded menu desc':         { es: 'Items que has marcado como descargados', pt: 'Itens que marcaste como baixados', fr: 'Éléments que vous avez marqués comme téléchargés', de: 'Einträge, die du als heruntergeladen markiert hast', da: 'Elementer du har markeret som hentet', ko: '다운로드됨으로 표시한 항목' },
+
   // === Sections / pages ===
   'Downloaded':                   { es: 'Descargado', pt: 'Baixado', fr: 'Téléchargé', de: 'Heruntergeladen', da: 'Hentet', ko: '다운로드됨' },
   'Watchlist':                    { es: 'Lista de seguimiento', pt: 'Lista para assistir', fr: 'À voir', de: 'Beobachtungsliste', da: 'Watchlist', ko: '시청 목록' },
@@ -68,6 +92,9 @@ const customKeys = {
   'Watched':                      { es: 'Visto', pt: 'Assistido', fr: 'Regardé', de: 'Angesehen', da: 'Set', ko: '시청함' },
   'Just watched':                 { es: 'Solo visto', pt: 'Só assistido', fr: 'Seulement regardé', de: 'Nur angesehen', da: 'Kun set', ko: '시청만 함' },
 
+  // === Theater (patch_theater_nav.js + patch_theater_*.js) ===
+  'Theater':                      { es: 'Teatro', pt: 'Teatro', fr: 'Théâtre', de: 'Theater', da: 'Teater', ko: '연극' },
+
   // === Backup page (long descriptive strings) ===
   'Download':                     { es: 'Descargar', pt: 'Baixar', fr: 'Télécharger', de: 'Herunterladen', da: 'Hent', ko: '다운로드' },
   'Download .db (binary)':        { es: 'Descargar .db (binario)', pt: 'Baixar .db (binário)', fr: 'Télécharger .db (binaire)', de: '.db herunterladen (Binär)', da: 'Hent .db (binær)', ko: '.db 다운로드 (바이너리)' },
@@ -95,20 +122,32 @@ const customKeys = {
   'Link YouTube account':         { es: 'Vincular cuenta de YouTube', pt: 'Vincular conta do YouTube', fr: 'Lier mon compte YouTube', de: 'YouTube-Konto verknüpfen', da: 'Tilknyt YouTube-konto', ko: 'YouTube 계정 연결' },
   'Sync my subscriptions':        { es: 'Sincronizar mis suscripciones', pt: 'Sincronizar minhas inscrições', fr: 'Synchroniser mes abonnements', de: 'Meine Abos synchronisieren', da: 'Synkroniser mine abonnementer', ko: '내 구독 동기화' },
   'Disconnect':                   { es: 'Desvincular', pt: 'Desvincular', fr: 'Déconnecter', de: 'Trennen', da: 'Frakobl', ko: '연결 해제' },
-  'Connected as':                 { es: 'Conectado como', pt: 'Conectado como', fr: 'Connecté en tant que', de: 'Verbunden als', da: 'Forbundet som', ko: '다음으로 연결됨' }
+  'Connected as':                 { es: 'Conectado como', pt: 'Conectado como', fr: 'Connecté en tant que', de: 'Verbunden als', da: 'Forbundet som', ko: '다음으로 연결됨' },
+
+  // === Backup table headers ===
+  'Action':                       { es: 'Acción', pt: 'Ação', fr: 'Action', de: 'Aktion', da: 'Handling', ko: '작업' },
+  'Description':                  { es: 'Descripción', pt: 'Descrição', fr: 'Description', de: 'Beschreibung', da: 'Beskrivelse', ko: '설명' },
+  'Control':                      { es: 'Control', pt: 'Controle', fr: 'Contrôle', de: 'Steuerung', da: 'Kontrol', ko: '제어' },
+  'Export JSON desc':             { es: 'Backup completo en formato JSON (importable luego desde la fila de abajo).', pt: 'Backup completo em formato JSON (pode ser importado depois na linha abaixo).', fr: 'Sauvegarde complète au format JSON (importable depuis la ligne ci-dessous).', de: 'Vollständige Sicherung im JSON-Format (kann später unten importiert werden).', da: 'Komplet sikkerhedskopi i JSON-format (kan importeres nedenfor).', ko: 'JSON 형식의 전체 백업 (아래 줄에서 가져올 수 있음).' },
+
+  // === Refresh buttons (v1.1.0 — Jellyfin import + per-game IGDB) ===
+  'Refresh from Jellyfin':        { es: 'Refrescar desde Jellyfin', pt: 'Atualizar do Jellyfin', fr: 'Actualiser depuis Jellyfin', de: 'Von Jellyfin aktualisieren', da: 'Opdater fra Jellyfin', ko: 'Jellyfin에서 새로고침' },
+  'Importing...':                 { es: 'Importando...', pt: 'Importando...', fr: 'Importation...', de: 'Importiere...', da: 'Importerer...', ko: '가져오는 중...' },
+  'Refresh IGDB time':            { es: 'Refrescar tiempo IGDB', pt: 'Atualizar tempo IGDB', fr: 'Actualiser le temps IGDB', de: 'IGDB-Zeit aktualisieren', da: 'Opdater IGDB-tid', ko: 'IGDB 시간 새로고침' },
+  'Refreshing IGDB...':           { es: 'Refrescando IGDB...', pt: 'Atualizando IGDB...', fr: 'Actualisation IGDB...', de: 'IGDB wird aktualisiert...', da: 'Opdaterer IGDB...', ko: 'IGDB 새로고침 중...' }
 };
 
 // Anchors per locale: `"In progress":"<translation>"` is the stable end-of-letter-I marker
 // in each locale chunk. Bumping any value here forces re-injection over old bundles.
 const LOCALES = [
-  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"Auto backups desc":"Auto backups desc"' },
-  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"Auto backups desc":"Un cron del host copia data.db cada noche a las 3 AM al directorio de backups configurado (retención 7d / 4w / 3m)."' },
-  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"Auto backups desc":"Um cron do host copia data.db todas as noites às 3 AM para o diretório de backups configurado (retenção 7d / 4w / 3m)."' },
+  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"Refreshing IGDB...":"Refreshing IGDB..."' },
+  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"Refreshing IGDB...":"Refrescando IGDB..."' },
+  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"Refreshing IGDB...":"Atualizando IGDB..."' },
   // FR uses double-quoted JS string so the apostrophe in "l'hôte" doesn't terminate the literal
-  { code: 'fr', anchor: '"In progress":"En cours"',        marker: "\"Auto backups desc\":\"Un cron de l'hôte copie data.db chaque nuit à 3 h dans le dossier de sauvegardes configuré (rétention 7j / 4s / 3m).\"" },
-  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"Auto backups desc":"Ein Cron auf dem Host kopiert data.db jede Nacht um 3 Uhr in das konfigurierte Backup-Verzeichnis (Aufbewahrung 7T / 4W / 3M)."' },
-  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"Auto backups desc":"En cron på værten kopierer data.db hver nat kl. 3 til den konfigurerede backup-mappe (opbevaring 7d / 4u / 3m)."' },
-  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"Auto backups desc":"호스트의 cron이 매일 밤 3시에 data.db를 설정된 백업 디렉터리로 복사합니다 (보관 7d / 4w / 3m)."' }
+  { code: 'fr', anchor: '"In progress":"En cours"',        marker: '"Refreshing IGDB...":"Actualisation IGDB..."' },
+  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"Refreshing IGDB...":"IGDB wird aktualisiert..."' },
+  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"Refreshing IGDB...":"Opdaterer IGDB..."' },
+  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"Refreshing IGDB...":"IGDB 새로고침 중..."' }
 ];
 
 // Strip any prior injection: walk `,"key":"val"` pairs after the anchor as long as the

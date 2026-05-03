@@ -51,6 +51,8 @@ const compDef = '_JF=function(){' +
   '}' +
   'var lastSync=st.lastSync?r.createElement("p",{className:"text-sm text-gray-600 dark:text-gray-300"},"\\u00daltima sincronizaci\\u00f3n: "+new Date(st.lastSync).toLocaleString("es")+" \\u2014 importados: "+(st.lastImported||0)+", saltados: "+(st.lastSkipped||0)+", sin emparejar: "+(st.lastUnmatched||0)):null;' +
   // build children
+  // (Title is rendered by the `my` settings-card wrapper in patch_credentials_to_tokens.js's
+  // _AT_EXT, so we don't repeat it here.)
   'var children=[statusBadge,lastSync];' +
   'if(edit){' +
     // form helpers (input field generator)
@@ -132,17 +134,9 @@ if (c.includes('_JF=function(){')) {
   console.log('jellyfin frontend: injected _JF component (config-form variant)');
 }
 
-// Mount _JF inside _BK between Catalog cleanup and Auto-backup. Idempotent.
-const bkAnchor = 'r.createElement("h2",{className:"text-xl font-bold mt-10 mb-2 self-start"},xo._("Automatic backups"))';
-const bkPatched = 'r.createElement("h2",{className:"text-xl font-bold mt-10 mb-2 self-start"},"Jellyfin"),r.createElement(_JF,null),' + bkAnchor;
-if (c.includes('r.createElement(_JF,null)')) {
-  console.log('jellyfin frontend: _JF already mounted in _BK');
-} else if (!c.includes(bkAnchor)) {
-  console.error('jellyfin frontend: _BK anchor (Automatic backups) not found'); process.exit(1);
-} else {
-  c = c.replace(bkAnchor, bkPatched);
-  console.log('jellyfin frontend: mounted _JF inside _BK page');
-}
+// _JF used to be mounted inside _BK (the Backup page). It now lives in
+// /settings/application-tokens via patch_credentials_to_tokens.js — the
+// component definition above is enough; no _BK mount needed.
 
 fs.writeFileSync(bundlePath, c);
 console.log('jellyfin frontend: complete');

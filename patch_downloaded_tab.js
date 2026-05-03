@@ -71,15 +71,19 @@ if (c.includes('{path:"/downloaded",name:xo._("Downloaded")}')) {
 }
 
 // 4. Add /downloaded to the SIDE_PATHS array used by the _DD hamburger dropdown,
-//    otherwise the entry exists but the dropdown filters it out.
-const sideOld = '["/upcoming","/in-progress","/calendar","/lists","/watchlist"]';
-const sideNew = '["/upcoming","/in-progress","/calendar","/lists","/watchlist","/downloaded"]';
-if (c.includes(sideNew)) {
-  console.log('downloaded tab: already in side dropdown');
-} else if (!c.includes(sideOld)) {
+//    otherwise the entry exists but the dropdown filters it out. patch_menu_split.js
+//    may already include /downloaded in its initial list — in which case this is a no-op.
+//    Tolerant regex (vs. exact string match) so the patch survives reordering or other
+//    inserts upstream (patch_abandoned_frontend.js does the same for /abandonados).
+const sideRe = /\["\/in-progress"[^\]]*"\/lists"[^\]]*\]|\["\/upcoming"[^\]]*"\/watchlist"[^\]]*\]/;
+const sideMatch = c.match(sideRe);
+if (!sideMatch) {
   console.error('downloaded tab: SIDE_PATHS anchor not found'); process.exit(1);
+} else if (sideMatch[0].includes('"/downloaded"')) {
+  console.log('downloaded tab: /downloaded already in SIDE_PATHS');
 } else {
-  c = c.split(sideOld).join(sideNew);
+  const replaced = sideMatch[0].slice(0, -1) + ',"/downloaded"]';
+  c = c.replace(sideMatch[0], replaced);
   console.log('downloaded tab: added /downloaded to _DD side dropdown filter');
 }
 

@@ -39,7 +39,8 @@ function makeSectioned(name, title, filterKey, gameSubSections) {
     'r.createElement(_Section,{label:xo._("Movies"),args:{mediaType:"movie",' + filterKey + ':!0}})',
     'r.createElement(_Section,{label:xo._("Tv"),args:{mediaType:"tv",' + filterKey + ':!0}})',
     'r.createElement(_GamesSection,null)',
-    'r.createElement(_Section,{label:xo._("Books"),args:{mediaType:"book",' + filterKey + ':!0}})'
+    'r.createElement(_Section,{label:xo._("Books"),args:{mediaType:"book",' + filterKey + ':!0}})',
+    'r.createElement(_Section,{label:xo._("Theater"),args:{mediaType:"theater",' + filterKey + ':!0}})'
   ];
 
   return name + '=function(){' +

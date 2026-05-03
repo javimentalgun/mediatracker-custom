@@ -3,6 +3,47 @@ FROM bonukai/mediatracker:latest@sha256:4397847ec1a88a83e29a9c19c31261af47de7300
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD wget -q -O /dev/null "http://$(hostname):7481/api/configuration" || exit 1
 
+# --- Security: CVE updates (Trivy-flagged HIGH/CRITICAL on the upstream image) ---
+
+# Alpine: upgrade ALL OS-level packages with HIGH/CRITICAL CVEs flagged by Trivy
+# (libcrypto3, libssl3, libpng, expat, libexpat, musl, musl-utils, lcms2, zlib).
+# `apk upgrade --available` bumps anything where the repo has a newer version,
+# which is the only way to clear most of these without changing base image.
+RUN apk update && apk upgrade --no-cache --available && rm -rf /var/cache/apk/*
+
+# Node deps: bump axios, fast-xml-parser, form-data, lodash (direct) and add
+# overrides for path-to-regexp + tar-fs (transitive). See patch for CVE list.
+# Upstream image ships only the node binary (no npm) so we install npm via apk
+# for this layer, run install, then remove npm + caches to keep the image lean.
+# `set -eo pipefail` ensures `tail` doesn't mask npm errors; lock file is removed
+# so the new ranges + overrides actually take effect.
+SHELL ["/bin/sh", "-eo", "pipefail", "-c"]
+COPY patch_security_updates.js /tmp/patch_security_updates.js
+RUN node /tmp/patch_security_updates.js
+RUN apk add --no-cache npm && \
+    cd /app && rm -f package-lock.json && \
+    npm install --legacy-peer-deps --no-audit --no-fund 2>&1 | tail -25 && \
+    rm -rf /root/.npm /var/cache/apk/*
+# Force express's nested path-to-regexp to 0.1.13 — npm overrides + nested
+# install both failed in this image. Workaround: download the 0.1.13 tarball
+# from the npm registry and overwrite the nested copy in-place. The 0.1.13
+# release is a single-file regex change so this is safe.
+# Targets CVE-2026-4867 (ReDoS via catastrophic backtracking).
+RUN cd /tmp && \
+    wget -q https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-0.1.13.tgz && \
+    mkdir -p ptr && tar xzf path-to-regexp-0.1.13.tgz -C ptr && \
+    rm -rf /app/node_modules/express/node_modules/path-to-regexp && \
+    mv ptr/package /app/node_modules/express/node_modules/path-to-regexp && \
+    rm -rf /tmp/ptr /tmp/path-to-regexp-0.1.13.tgz && \
+    node -p "'path-to-regexp (express nested) → ' + require('/app/node_modules/express/node_modules/path-to-regexp/package.json').version"
+# Note: npm stays installed (~45MB) because `apk del npm` also removes its
+# nodejs dependency, which clobbers the upstream `/usr/local/bin/node` symlink
+# and breaks every later `RUN node /tmp/patch_*.js` step. Acceptable trade-off.
+# Sanity: print resolved versions for the bumped packages so build logs document the fix.
+RUN cd /app && for p in axios fast-xml-parser form-data lodash; do \
+      echo "$p: $(node -p "require('$p/package.json').version")"; \
+    done
+
 # --- Backend patches ---
 
 # Tag the build with a fork-specific version suffix (e.g. 0.2.11-custom.1)
@@ -35,6 +76,11 @@ RUN node /tmp/patch_tv_episode_progress_in_items.js
 # In-progress filter: include TV shows where firstUnwatchedEpisode.progress > 0
 COPY patch_in_progress_filter.js /tmp/patch_in_progress_filter.js
 RUN node /tmp/patch_in_progress_filter.js
+
+# Fix orderBy=progress SQL "ambiguous column name: progress" — qualifies the
+# bare "progress" in the CASE ELSE branch as "progress"."progress".
+COPY patch_items_progress_sort_ambiguous.js /tmp/patch_items_progress_sort_ambiguous.js
+RUN node /tmp/patch_items_progress_sort_ambiguous.js
 
 # --- Frontend patches ---
 # (applied below as features are added)
@@ -266,10 +312,28 @@ RUN node /tmp/patch_seen_kind_migration.js
 COPY patch_seen_kind_wiring.js /tmp/patch_seen_kind_wiring.js
 RUN node /tmp/patch_seen_kind_wiring.js
 
+# Decouple the four item states (pendiente / en curso / visto / completado).
+# Strips the implicit watchlist add/remove from progress.addItem so toggling
+# completion never silently mutates the watchlist.
+COPY patch_states_independent.js /tmp/patch_states_independent.js
+RUN node /tmp/patch_states_independent.js
+
 # Drop redundant `lastSeen2` leftJoin in items query (was a byte-for-byte duplicate
 # of `lastSeen`, costing ~5s on movies for nothing).
 COPY patch_items_dedupe_lastseen.js /tmp/patch_items_dedupe_lastseen.js
 RUN node /tmp/patch_items_dedupe_lastseen.js
+
+# Eye icon on game cards when kind=watched, next to the check_circle.
+# Must run after patch_audio_listened_icon (frontend check_circle markup) AND
+# after patch_items_dedupe_lastseen (which renames lastSeen2 → lastSeen, the
+# field this patch keys off in the row map).
+COPY patch_game_watched_card_icon.js /tmp/patch_game_watched_card_icon.js
+RUN node /tmp/patch_game_watched_card_icon.js
+
+# Cache /api/items for 60s and keep results in memory 5min so the games
+# "Visto" page (3 Zv instances) doesn't refetch on every re-render.
+COPY patch_items_query_cache.js /tmp/patch_items_query_cache.js
+RUN node /tmp/patch_items_query_cache.js
 
 # Short-circuit the seenEpisodes inner materialization for non-tv mediaTypes
 # (movies/books/games never produce meaningful rows from this 31k-seen scan).
@@ -397,6 +461,17 @@ RUN node /tmp/patch_stats_distinct_game_runtime.js
 COPY patch_auto_refresh_games_on_stats.js /tmp/patch_auto_refresh_games_on_stats.js
 RUN node /tmp/patch_auto_refresh_games_on_stats.js
 
+# Inline YouTube watched stats into /api/statistics/summary so the homepage
+# delivers all blocks in one request. patch_homepage_youtube_block.js consumes
+# o.youtube from the summary instead of doing a separate fetch.
+COPY patch_youtube_stats_in_summary.js /tmp/patch_youtube_stats_in_summary.js
+RUN node /tmp/patch_youtube_stats_in_summary.js
+
+# Homepage summary: book "duration" comes from numberOfPages × 2 minutes,
+# instead of sum(seen.duration) which is almost always 0.
+COPY patch_book_reading_minutes.js /tmp/patch_book_reading_minutes.js
+RUN node /tmp/patch_book_reading_minutes.js
+
 # Admin endpoint POST /api/refresh-game-runtimes — bulk-fetch IGDB time-to-beat
 # for every existing video_game (without waiting on the 24h refresh cycle).
 COPY patch_refresh_game_runtimes.js /tmp/patch_refresh_game_runtimes.js
@@ -407,6 +482,17 @@ RUN node /tmp/patch_refresh_game_runtimes.js
 # users to an old bundle even after rebuilds.
 COPY patch_sw_no_cache.js /tmp/patch_sw_no_cache.js
 RUN node /tmp/patch_sw_no_cache.js
+
+# Bugfix: req.header('Accept-Encoding').includes(...) crashes when the header
+# is absent. Make the brotli/gzip swap defensive so /js and /css don't 500.
+COPY patch_accept_encoding_safe.js /tmp/patch_accept_encoding_safe.js
+RUN node /tmp/patch_accept_encoding_safe.js
+
+# Bugfix: utils.downloadAsset() makes axios requests with no User-Agent, and
+# Wikimedia Commons (and other CDNs) 403 those. Add a UA so theater posters
+# from Wikidata can actually be fetched.
+COPY patch_download_asset_ua.js /tmp/patch_download_asset_ua.js
+RUN node /tmp/patch_download_asset_ua.js
 
 # --- Jellyfin integration ---
 # Backend: jellyfinStatus / jellyfinSync / jellyfinLookup endpoints + helpers
@@ -511,10 +597,48 @@ RUN node /tmp/patch_youtube_watched_routes.js
 COPY patch_youtube_frontend.js /tmp/patch_youtube_frontend.js
 RUN node /tmp/patch_youtube_frontend.js
 
+# UI language switcher: dropdown in Settings that persists in localStorage and
+# overrides navigator.language at app boot. Must run BEFORE patch_i18n_custom so
+# the new "UI language" / "Auto (browser)" keys can be translated.
+COPY patch_ui_language_switcher.js /tmp/patch_ui_language_switcher.js
+RUN node /tmp/patch_ui_language_switcher.js
+
 # i18n: add custom translation keys (Downloaded, Play in Jellyfin, etc.) to the
 # bundle's ES + EN locale chunks. Patches that use xo._("Key") get translated.
 COPY patch_i18n_custom.js /tmp/patch_i18n_custom.js
 RUN node /tmp/patch_i18n_custom.js
+
+# Theater section: nav entry (left of YouTube), route → ey() generic page,
+# Tt predicate, mediaType label. Must run AFTER patch_i18n_custom (uses
+# xo._("Theater")) AND after patch_youtube_frontend (anchors on the /youtube
+# route element which is created there).
+COPY patch_theater_nav.js /tmp/patch_theater_nav.js
+RUN node /tmp/patch_theater_nav.js
+
+# Add 'theater' to the mediaType enum used by the route validators (otherwise
+# /api/items?mediaType=theater is rejected with 400 and the page goes blank).
+COPY patch_theater_routes_enum.js /tmp/patch_theater_routes_enum.js
+RUN node /tmp/patch_theater_routes_enum.js
+
+# Wikidata SPARQL provider for `mediaType: 'theater'`. Drops the provider
+# class file in /app/build/metadata/provider/wikidata.js and registers it in
+# metadataProviders.js. Search via mwapi EntitySearch + filter to instances
+# of theatrical work (Q25379). Reuses tmdbId column for the Wikidata QID.
+COPY patch_theater_metadata_provider.js /tmp/patch_theater_metadata_provider.js
+RUN node /tmp/patch_theater_metadata_provider.js
+
+# Show a Material `theater_comedy` icon next to the "Teatro" mediaType label
+# on item cards.
+COPY patch_theater_card_icon.js /tmp/patch_theater_card_icon.js
+RUN node /tmp/patch_theater_card_icon.js
+
+# Frontend: the "Add to seen history" big button conditional in the action panel
+# branches on audiobook/book/video_game/movie/tv but never on theater, so theater
+# items got no "Marcar como visto" big button — only the small rating star and
+# download toggle were visible. Add a Tt(n) (theater) branch.
+COPY patch_theater_seen_button.js /tmp/patch_theater_seen_button.js
+RUN node /tmp/patch_theater_seen_button.js
+
 
 # Rename bundle to include a content hash. Without this, Cloudflare/browsers cache
 # main_<originalHash>.js for a year (max-age=31536000) and never fetch new content
@@ -529,6 +653,43 @@ RUN node /tmp/patch_homepage_remove_audiobooks.js
 # audiolibros block used to occupy. Must run AFTER patch_homepage_remove_audiobooks.js.
 COPY patch_homepage_youtube_block.js /tmp/patch_homepage_youtube_block.js
 RUN node /tmp/patch_homepage_youtube_block.js
+
+# Theater block in the homepage summary, just before the YouTube block. Anchors
+# on the /*mt-fork:yt-home*/ marker so this MUST run after patch_homepage_youtube_block.
+COPY patch_homepage_theater_block.js /tmp/patch_homepage_theater_block.js
+RUN node /tmp/patch_homepage_theater_block.js
+
+# Homepage "Recently released": exclude abandoned (server-side) AND completed
+# (client-side filter on e.seen). Dropped series and finished items don't
+# belong in a "what's new" feed.
+COPY patch_homepage_exclude_abandoned.js /tmp/patch_homepage_exclude_abandoned.js
+RUN node /tmp/patch_homepage_exclude_abandoned.js
+
+# Homepage: drop the "Next episode to watch" block. Same info is in /in-progress.
+COPY patch_homepage_remove_next_episode.js /tmp/patch_homepage_remove_next_episode.js
+RUN node /tmp/patch_homepage_remove_next_episode.js
+
+# Hamburger sectioned pages (Pendiente / Abandonados / Descargados): grid shows
+# only cover art (no rating, no top-bar badges). Header count + footer paginator
+# from Zv unchanged. Per-mediaType pages (/tv, /movies, ...) unaffected.
+COPY patch_section_pages_minimal_grid.js /tmp/patch_section_pages_minimal_grid.js
+RUN node /tmp/patch_section_pages_minimal_grid.js
+
+# Persist navigation state across back/forward: page title visible always,
+# section-open state in sessionStorage, Zv sort/filter/orderBy in URL params.
+COPY patch_persistent_state.js /tmp/patch_persistent_state.js
+RUN node /tmp/patch_persistent_state.js
+
+# React Query defaults: staleTime=30s so revisiting pages doesn't refetch
+# every list — back/forward feels instant.
+COPY patch_query_cache_tuning.js /tmp/patch_query_cache_tuning.js
+RUN node /tmp/patch_query_cache_tuning.js
+
+# (patch_item_flags_combined moved AFTER patch_actively_in_progress_frontend
+# so the _AB / _AIP function definitions exist when we rewrite their fetches.)
+
+# (count-query-abandoned and only-just-watched moved AFTER patch_abandoned_filter
+# below, since they both need the abandoned filter's destructure additions.)
 
 # Homepage summary games block: replace "(N plays)" with "(Xh)" using duration field.
 COPY patch_homepage_games_hours.js /tmp/patch_homepage_games_hours.js
@@ -577,14 +738,147 @@ RUN node /tmp/patch_abandoned_filter.js
 COPY patch_abandoned_frontend.js /tmp/patch_abandoned_frontend.js
 RUN node /tmp/patch_abandoned_frontend.js
 
+# Actively-in-progress flag: backend table + endpoints + items.js join.
+# A user-toggled flag separate from the `progress` table, so the UI can show
+# "manually marked as in progress" distinct from "watchlist + already released".
+COPY patch_actively_in_progress_backend.js /tmp/patch_actively_in_progress_backend.js
+RUN node /tmp/patch_actively_in_progress_backend.js
+
+# Actively-in-progress: detail-page button (right after _AB).
+COPY patch_actively_in_progress_frontend.js /tmp/patch_actively_in_progress_frontend.js
+RUN node /tmp/patch_actively_in_progress_frontend.js
+
+# Combined /api/item-flags endpoint + frontend cache so the _AB ("Marcar como
+# abandonada") and _AIP ("Marcar como en proceso") buttons render in lockstep
+# instead of popping in one after the other on the detail page. MUST run after
+# both _AB and _AIP are injected.
+COPY patch_item_flags_combined.js /tmp/patch_item_flags_combined.js
+RUN node /tmp/patch_item_flags_combined.js
+
+# "Marcar como visto" button on the detail page (replaces the eye on game cards).
+# Must run after patch_item_flags_combined so the shared cache helpers exist.
+COPY patch_mark_watched_button.js /tmp/patch_mark_watched_button.js
+RUN node /tmp/patch_mark_watched_button.js
+
+# Pre-hydrate _AB / _AIP / _MAS from the details response so the buttons
+# render synchronously with the rest of the action row instead of popping in
+# alongside the cover. Must run after _AB, _AIP, _MAS are all defined.
+COPY patch_details_includes_flags.js /tmp/patch_details_includes_flags.js
+RUN node /tmp/patch_details_includes_flags.js
+
+# "Update metadata" button: was rendered as a tiny `text-sm btn` (looked unfinished)
+# and only for source ∈ {igdb, tmdb, openlibrary, audible} — so theater
+# (source='wikidata') never showed it. Promote to btn-blue full-width and
+# include 'wikidata' in the allowlist. MUST run after patch_actively_in_progress_frontend
+# (which uses the original 4-source string as anchor while relocating the button).
+COPY patch_update_metadata_btn.js /tmp/patch_update_metadata_btn.js
+RUN node /tmp/patch_update_metadata_btn.js
+
+# Per-game "Refrescar tiempo IGDB" button on the detail page (video_game + igdbId).
+# Calls POST /api/refresh-game-runtime/:mediaItemId. Must run AFTER
+# patch_update_metadata_btn (which is the anchor it wraps).
+COPY patch_per_game_runtime_refresh.js /tmp/patch_per_game_runtime_refresh.js
+RUN node /tmp/patch_per_game_runtime_refresh.js
+
+# Hide the empty "I am watching/reading/listening/playing it" placeholder for
+# theater items — it has no label branch for theater so it renders as a 34×6 px
+# ghost button. _AIP ("Marcar como en proceso") already covers the same intent.
+COPY patch_theater_hide_iam_btn.js /tmp/patch_theater_hide_iam_btn.js
+RUN node /tmp/patch_theater_hide_iam_btn.js
+
+# The "Seen history" / "Read history" link on the detail page branches on
+# audiobook/book/movie/tv/game but never on theater → empty link for theater.
+# Add a Tt(a) branch using the "Seen history" label.
+COPY patch_theater_seen_history_link.js /tmp/patch_theater_seen_history_link.js
+RUN node /tmp/patch_theater_seen_history_link.js
+
+# Rename the white "Lo estoy viendo / leyendo / etc." button (one branch per
+# media type) to a single "Marcar como en proceso" label, and make the click
+# also PUT /api/actively-in-progress/:id (so the item is actually marked as
+# in-progress instead of just nudging progress=0).
+COPY patch_iam_to_inprogress.js /tmp/patch_iam_to_inprogress.js
+RUN node /tmp/patch_iam_to_inprogress.js
+
+# Add two extra buttons to the Rp progress modal (between "Marcar como
+# completado" and "Cancelar"):
+#   • Quitar de proceso  — DELETE /api/actively-in-progress/:id
+#   • Quitar progreso    — resets progress to 0 (no seen-row deletion)
+COPY patch_modal_clear_progress.js /tmp/patch_modal_clear_progress.js
+RUN node /tmp/patch_modal_clear_progress.js
+
+
+# Bug: the default count query in items.js counts ALL mediaItem rows of the
+# requested type, while the data query restricts to library items (in a list
+# or with a seen row). On /theater this showed "9 elementos" while only 2
+# were rendered. Make the default count branch apply the same library filter.
+COPY patch_count_in_library.js /tmp/patch_count_in_library.js
+RUN node /tmp/patch_count_in_library.js
+
+# Bugfix for header count and paginator on /abandonados and /in-progress: the
+# count fast-path didn't know about excludeAbandoned/onlyAbandoned. Runs after
+# patch_abandoned_filter so excludeAbandoned/onlyAbandoned are in the destructure.
+COPY patch_count_query_abandoned.js /tmp/patch_count_query_abandoned.js
+RUN node /tmp/patch_count_query_abandoned.js
+
+# /games filter dropdown: add "Solo visto" (Just watched) — games marked Watched
+# but never Played. Also fixes upstream's broken pass-through for
+# onlyWatched/onlyPlayed. Runs after patch_abandoned_filter so the controller's
+# destructure already ends with onlyAbandoned (the regex anchor we use).
+COPY patch_only_just_watched.js /tmp/patch_only_just_watched.js
+RUN node /tmp/patch_only_just_watched.js
+
+# /games + filter=Visto: replace the flat grid with two collapsible sections
+# ("Solo visto" / "Vistos y jugados"). Backend filters from patch_only_just_watched.
+COPY patch_games_seen_split.js /tmp/patch_games_seen_split.js
+RUN node /tmp/patch_games_seen_split.js
+
 # Page background overrides: light = "cáscara de huevo" (#F0EAD6), dark = black.
 COPY patch_background_colors.js /tmp/patch_background_colors.js
 RUN node /tmp/patch_background_colors.js
+
+# CSS rule for .btn-green (used by _AIP "Marcar como en proceso" toggle). Must
+# run BEFORE patch_css_rename so the content hash reflects the new rule.
+COPY patch_css_btn_green.js /tmp/patch_css_btn_green.js
+RUN node /tmp/patch_css_btn_green.js
+
+# Override .items-grid fixed widths (180/360/540/720/900/1080 by breakpoint)
+# so the grid fills its container — fixes cards getting clipped in sectioned
+# pages (En proceso, Watchlist, Descargados, etc.).
+COPY patch_css_items_grid_fluid.js /tmp/patch_css_items_grid_fluid.js
+RUN node /tmp/patch_css_items_grid_fluid.js
+
+# Strip the `flex justify-center w-full` wrapper around .items-grid in the JS
+# bundle (upstream centers the grid; combined with the section's overflow-hidden
+# this clips the first item's left half).
+COPY patch_items_grid_no_center.js /tmp/patch_items_grid_no_center.js
+RUN node /tmp/patch_items_grid_no_center.js
+
+# Make /import and /backup live INSIDE the Settings layout so the sidebar
+# stays visible while the user is on those pages.
+COPY patch_settings_import_backup_inside.js /tmp/patch_settings_import_backup_inside.js
+RUN node /tmp/patch_settings_import_backup_inside.js
 
 # Content-hash the CSS (busts long-lived browser/CF cache when CSS changes).
 # Must run after any patch that modifies the CSS (background_colors).
 COPY patch_css_rename.js /tmp/patch_css_rename.js
 RUN node /tmp/patch_css_rename.js
+
+# Move credential-style config blocks (IGDB, soon Jellyfin/YouTube) from their
+# current locations into the "Application tokens" settings tab.
+COPY patch_credentials_to_tokens.js /tmp/patch_credentials_to_tokens.js
+RUN node /tmp/patch_credentials_to_tokens.js
+
+# /api/jellyfin/import-from-server: scan all of Jellyfin and (1) mark existing
+# MT items as downloaded, (2) create stubs for items not yet in MT (TMDB
+# metadata fills in on the next refresh cycle).
+COPY patch_jellyfin_import_from_server.js /tmp/patch_jellyfin_import_from_server.js
+RUN node /tmp/patch_jellyfin_import_from_server.js
+
+# Two purple "Refrescar desde Jellyfin" buttons (Downloaded page + _JF in
+# settings/application-tokens). Must run AFTER patch_downloaded_tab and
+# patch_jellyfin_frontend (the components it wraps).
+COPY patch_jellyfin_import_buttons.js /tmp/patch_jellyfin_import_buttons.js
+RUN node /tmp/patch_jellyfin_import_buttons.js
 
 COPY patch_bundle_rename.js /tmp/patch_bundle_rename.js
 RUN node /tmp/patch_bundle_rename.js

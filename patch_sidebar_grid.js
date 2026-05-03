@@ -15,11 +15,21 @@ const oldBlock = 'function(e){var t;return["igdb","tmdb","openlibrary","audible"
 // Toggle "Marcar como completado" / "Quitar completado":
 //   - If item is completed (seen / progress=1 / audioProgress=1): red, removes completion
 //   - Else: white, marks completion. For games, auto-pulls HLTB time and stores it as seen.duration
-const completedExpr = '((a.seen===true)||(a.progress===1)||(a.audioProgress===1))';
+//
+// For games, "completado" means a kind='played' seen row exists. Without this
+// branch the button would also light up after "Marcar como visto" (kind='watched'),
+// because `a.seen===true` is set as soon as ANY seen row exists.
+const completedExpr =
+  '((a.mediaType==="video_game"' +
+    '?(a.seenHistory&&a.seenHistory.some(function(s){return s.kind==="played"}))' +
+    ':a.seen===true' +
+  ')||a.progress===1||a.audioProgress===1)';
+// "Quitar completado" must delete only kind='played' rows, not watched ones —
+// the new DELETE accepts &kind=played (handler patched in patch_seen_kind_wiring).
 const markCompletedBtn = 'r.createElement("div",{className:"text-sm btn",style:' + completedExpr + '?{background:"#dc2626",color:"white",borderColor:"#dc2626"}:{},onClick:function(){' +
   'if(' + completedExpr + '){' +
     'Promise.all([' +
-      'fetch("/api/seen/?mediaItemId="+a.id,{method:"DELETE",credentials:"same-origin"}),' +
+      'fetch("/api/seen/?mediaItemId="+a.id+"&kind=played",{method:"DELETE",credentials:"same-origin"}),' +
       'fetch("/api/audio-progress?mediaItemId="+a.id+"&progress=0",{method:"PUT",credentials:"same-origin"})' +
     ']).then(function(){un({mediaItemId:a.id,progress:0,duration:0});HW.refetchQueries(en(a.id));HW.refetchQueries(["items"])});' +
   '}else{' +

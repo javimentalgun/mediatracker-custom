@@ -16,19 +16,11 @@ if (c.includes('_SE=function(e){var _s=r.useState')) {
   console.log('game seen: injected _SE component');
 }
 
-// Place _SE on game cards in top-center. Anchor uses the rating section start which is
-// stable regardless of whether play_circle/check are present or not.
-const anchor = ',m&&Wo(t)&&r.createElement("div",{className:"absolute pointer-events-auto bottom-1 left-1"},r.createElement(Yo';
-const seenButtonElem = ',Ao(t)&&r.createElement("div",{className:"absolute pointer-events-auto top-1",style:{left:"50%",transform:"translateX(-50%)"}},r.createElement(_SE,{id:t.id,s:t.seen}))';
-
-if (c.includes('r.createElement(_SE,{id:t.id')) {
-  console.log('game seen: _SE button already placed');
-} else if (!c.includes(anchor)) {
-  console.error('game seen: anchor not found'); process.exit(1);
-} else {
-  c = c.replace(anchor, seenButtonElem + anchor);
-  console.log('game seen: added _SE eye button on game cards (top-center)');
-}
+// Eye on game cards REMOVED — moved to a "Marcar como visto" button on the
+// detail page (patch_mark_watched_button.js). The card-overlay eye was easy
+// to mis-click and confused with "marcar como completado" (which sends
+// kind=played). The detail-page button is explicit and shares its style with
+// the rest of the action row.
 
 fs.writeFileSync(bundlePath, c);
 console.log('game seen: complete');

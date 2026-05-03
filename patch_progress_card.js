@@ -12,8 +12,13 @@ const old = 'Lo(t)&&r.createElement(r.Fragment,null,r.createElement("div",{class
 //   tv        → firstUnwatchedEpisode.progress
 //   else      → t.progress
 const PROG = '(jo(t)?(t.audioProgress||0):Ro(t)?((t.firstUnwatchedEpisode&&t.firstUnwatchedEpisode.progress)||0):(t.progress||0))';
-// Show bar when there is something meaningful to show
-const HAS = '(jo(t)?t.audioProgress>0:Lo(t)||(Ro(t)&&t.firstUnwatchedEpisode))';
+// Show bar + Progreso button whenever the item has unfinished progress OR
+// hasn't been seen yet. For non-TV items the user may also start a re-watch
+// after completing it, so an active in-flight progress (0 < PROG < 1) makes
+// the bar reappear even if t.seen is true.
+//   TV     → has unwatched episodes
+//   non-TV → not seen yet, OR re-watch in progress (0 < PROG < 1)
+const HAS = '(Ro(t)?Boolean(t.firstUnwatchedEpisode):(!t.seen||(' + '(jo(t)?(t.audioProgress||0):(t.progress||0))' + '>0&&' + '(jo(t)?(t.audioProgress||0):(t.progress||0))' + '<1)))';
 
 const patched = HAS + '&&r.createElement(r.Fragment,null,r.createElement("div",{className:"flex items-center justify-between mt-1"},' +
   'r.createElement("span",{className:"text-xs text-gray-400"},Math.round(100*' + PROG + '),"%"),' +

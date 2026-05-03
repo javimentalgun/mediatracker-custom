@@ -1,10 +1,10 @@
 const fs = require('fs');
 const child = require('child_process');
 
-// Rename "En progreso" / "In progress" to "Pendiente" for the user-visible text:
-//   - hardcoded h2 heading on /in-progress page  ("En progreso" → "Pendiente")
-//   - Spanish i18n value for the "In progress" key  ("En proceso" → "Pendiente")
-// Path stays /in-progress (route rename would break bookmarks/PWA).
+// Rename the hardcoded "En progreso" heading on /in-progress to "En proceso"
+// (which is also the default Spanish i18n value for the "In progress" key, so
+// the menu and the page heading stay in sync). Path remains /in-progress to
+// avoid breaking bookmarks/PWA.
 
 const bundlePath = child.execSync('ls /app/public/main_*.js | grep -v "\\.LICENSE\\|\\.map"').toString().trim();
 let c = fs.readFileSync(bundlePath, 'utf8');
@@ -17,26 +17,15 @@ if (c.includes(marker)) {
 
 let changed = 0;
 
-// 1. Hardcoded heading on /in-progress page.
+// Hardcoded heading on /in-progress page: "En progreso" → "En proceso".
 const oldHeading = '"text-2xl mb-4 px-2"},"En progreso")';
-const newHeading = '"text-2xl mb-4 px-2"},"Pendiente")';
+const newHeading = '"text-2xl mb-4 px-2"},"En proceso")';
 if (c.includes(oldHeading)) {
   c = c.replace(oldHeading, newHeading);
   changed++;
-  console.log('rename inprogress: page heading → Pendiente');
+  console.log('rename inprogress: page heading → En proceso');
 } else {
   console.log('rename inprogress: page heading anchor not found (skipping)');
-}
-
-// 2. Spanish i18n value. Match exactly so we don't touch other locales.
-const oldEsKey = '"In progress":"En proceso"';
-const newEsKey = '"In progress":"Pendiente"';
-if (c.includes(oldEsKey)) {
-  c = c.replace(oldEsKey, newEsKey);
-  changed++;
-  console.log('rename inprogress: ES i18n value → Pendiente');
-} else {
-  console.log('rename inprogress: ES i18n value anchor not found (skipping)');
 }
 
 if (changed === 0) {

@@ -3,7 +3,7 @@ const bundlePath = require('child_process').execSync('ls /app/public/main_*.js |
 let c = fs.readFileSync(bundlePath, 'utf8');
 
 const NEW_NAME = 'javimentalgun.mediatracker';
-const TAGLINE = 'built clumsily and comfortably with vibe coding using Claude Opus \\u2014 lightly reviewed';
+const TAGLINE = 'built comfortably but with dedication with Claude Opus';
 
 const fresh = 'Wy=function(){var e=Ap().configuration;return r.createElement(r.Fragment,null,' +
   'r.createElement("div",null,' +

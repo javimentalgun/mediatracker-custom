@@ -29,9 +29,19 @@ const summaryExpr =
     'return r.createElement("div",{className:"text-xs text-gray-500 mt-1"},parts.join(" · "))' +
   '})()';
 
+// For games, `seen===true` is true as soon as any seen row exists (including
+// kind='watched'), which would falsely light up "Completado" when the user
+// only clicked "Marcar como visto". Require kind='played' for games; other
+// media types keep the original semantic.
+const completedExpr =
+  '((a.mediaType==="video_game"' +
+    '?(a.seenHistory&&a.seenHistory.some(function(s){return s.kind==="played"}))' +
+    ':a.seen===true' +
+  ')||a.progress===1||a.audioProgress===1)';
+
 const fresh = 'r.createElement("div",{className:"mt-3"},' +
   'r.createElement("div",{style:{display:"flex",alignItems:"center",gap:"0.5rem"}},' + old +
-    ',((a.seen===true)||(a.progress===1)||(a.audioProgress===1))&&r.createElement("span",{style:{background:"#16a34a",color:"white",padding:"0.15rem 0.5rem",borderRadius:"0.25rem",fontSize:"0.75rem",fontWeight:"600"}},"✓ Completado")' +
+    ',' + completedExpr + '&&r.createElement("span",{style:{background:"#16a34a",color:"white",padding:"0.15rem 0.5rem",borderRadius:"0.25rem",fontSize:"0.75rem",fontWeight:"600"}},"✓ Completado")' +
   '),' + summaryExpr +
 ')';
 

@@ -17,11 +17,11 @@ const newBlock =
   '(Do(a)||jo(a))?r.createElement("div",{style:{display:"flex",gap:"0.5rem",marginTop:"0.75rem"}},' +
     'r.createElement("div",{style:{flex:"1"}},' +
       'r.createElement(mo,{openModal:function(open){return r.createElement("div",{className:"text-sm text-green-500 btn",onClick:function(){return open()}},"Progreso leído")}},function(close){return r.createElement(Rp,{mediaItem:a,closeModal:close,mode:"read"})}),' +
-      'r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*(a.progress||0)),"%")' +
+      '(!a.seen)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*(a.progress||0)),"%")' +
     '),' +
     'r.createElement("div",{style:{flex:"1"}},' +
       'r.createElement(mo,{openModal:function(open){return r.createElement("div",{className:"text-sm text-green-500 btn",onClick:function(){return open()}},"Progreso escuchado")}},function(close){return r.createElement(Rp,{mediaItem:a,closeModal:close,mode:"listen"})}),' +
-      'r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*(a.audioProgress||0)),"%")' +
+      '(!a.seen)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*(a.audioProgress||0)),"%")' +
     ')' +
   '):r.createElement("div",{className:"mt-3"},r.createElement(ug,{mediaItem:a}))';
 

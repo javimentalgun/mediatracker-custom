@@ -18,7 +18,10 @@ if (oldFunction.includes('e.mode==="listen"')) { console.log('progress redesign:
 const newFunction =
 `Rp=function(e){` +
   `var t=e.mediaItem,n=e.closeModal,_mode=e.mode;` +
-  `var _tvEp=Ro(t)&&t.firstUnwatchedEpisode?t.firstUnwatchedEpisode:null;` +
+  // e.episode (when present) targets a specific episode; otherwise we fall back
+  // to the show's firstUnwatchedEpisode so the show-level Progreso button keeps
+  // working as before.
+  `var _tvEp=e.episode||(Ro(t)&&t.firstUnwatchedEpisode?t.firstUnwatchedEpisode:null);` +
   // Source of truth for the progress slider:
   //   TV → firstUnwatchedEpisode.progress
   //   audiobook (or explicit listen mode) → audioProgress
@@ -37,15 +40,29 @@ const newFunction =
       `if(_tvEp){url+="&episodeId="+_tvEp.id}` +
       `if(autoDur)url+="&duration="+autoDur;` +
       `var promises=[fetch(url,{method:"PUT",credentials:"same-origin"})];` +
-      // For non-TV: update ONLY the field that matches the active mode.
-      //   audiobook OR listen modal → audioProgress
-      //   else (read modal / movie / game) → progress
+      // For non-TV: clear the slider-driven progress field (the seen entry
+      // above is the source of truth for "completed"). For audio modes (jo or
+      // listen) we leave audioProgress=1 instead so the book/audiobook
+      // music_note indicator (which keys off audioProgress>0) stays visible
+      // after completion.
+      //   audiobook OR listen modal → audioProgress = 1 (sentinel: listen-completed)
+      //   else (read modal / movie / game) → progress = 0 (cleared)
       `if(!_tvEp){` +
         `if(_useAudio){` +
           `promises.push(fetch("/api/audio-progress?mediaItemId="+t.id+"&progress=1",{method:"PUT",credentials:"same-origin"}));` +
         `}else{` +
-          `un({mediaItemId:t.id,progress:1,duration:l||autoDur||0});` +
+          `un({mediaItemId:t.id,progress:0,duration:l||autoDur||0});` +
         `}` +
+      `}` +
+      // Remove from watchlist when the show / movie / etc. is fully completed.
+      // For non-TV: always (a single seen entry means completion).
+      // For TV: only when this seen call leaves the show with no more
+      // unwatched episodes — i.e. when this was the last unwatched one.
+      `var _wlDel=function(){return fetch("/api/watchlist?mediaItemId="+t.id,{method:"DELETE",credentials:"same-origin"})};` +
+      `if(!_tvEp){` +
+        `promises.push(_wlDel());` +
+      `}else if((Number(t.seenEpisodesCount||0)+1)>=Number(t.numberOfAiredEpisodes||0)){` +
+        `promises.push(_wlDel());` +
       `}` +
       `Promise.all(promises).finally(function(){HW.refetchQueries(en(t.id));HW.refetchQueries(["items"]);n()});` +
     `};` +

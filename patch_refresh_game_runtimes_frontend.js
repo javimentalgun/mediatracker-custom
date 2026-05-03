@@ -50,17 +50,10 @@ if (c.includes('_GR=function(){')) {
   console.log('refresh game runtimes frontend: injected _GR component');
 }
 
-// Mount _GR inside _BK page. Place after the Jellyfin section, before "Automatic backups".
-const bkAnchor = 'r.createElement("h2",{className:"text-xl font-bold mt-10 mb-2 self-start"},xo._("Automatic backups"))';
-const bkPatched = marker + 'r.createElement("h2",{className:"text-xl font-bold mt-10 mb-2 self-start"},"Tiempo de juegos (IGDB)"),r.createElement(_GR,null),' + bkAnchor;
-if (c.includes(marker + 'r.createElement("h2"')) {
-  console.log('refresh game runtimes frontend: _GR already mounted');
-} else if (!c.includes(bkAnchor)) {
-  console.error('refresh game runtimes frontend: _BK anchor not found'); process.exit(1);
-} else {
-  c = c.replace(bkAnchor, bkPatched);
-  console.log('refresh game runtimes frontend: mounted _GR in _BK page');
-}
-
+// _GR no longer mounts inside _BK. Per-game refresh ("Refrescar tiempo IGDB"
+// on each game's detail page) is added by patch_per_game_runtime_refresh.js.
+// _GR's component definition stays available in case a future caller wants
+// the bulk version, but it's not rendered anywhere by default.
+c = marker + c;
 fs.writeFileSync(bundlePath, c);
-console.log('refresh game runtimes frontend: complete');
+console.log('refresh game runtimes frontend: complete (component defined; mount moved per-game)');

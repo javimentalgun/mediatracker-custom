@@ -32,26 +32,38 @@ if (!c.includes(oldRet)) {
 }
 
 const newRet =
-  "  // mt-fork: distinct-game-runtime — sum max IGDB time-to-beat per distinct played game\n" +
-  "  const _gameDistinctRow = await _dbconfig.Database.knex.from(_dbconfig.Database.knex\n" +
-  "    .select('mediaItem.id', 'mediaItem.runtime')\n" +
-  "    .from('seen')\n" +
-  "    .leftJoin('mediaItem', 'mediaItem.id', 'seen.mediaItemId')\n" +
-  "    .where('seen.userId', userId)\n" +
-  "    .where('mediaItem.mediaType', 'video_game')\n" +
-  "    .whereNotNull('mediaItem.runtime')\n" +
-  "    .distinct()\n" +
-  "    .as('dg')\n" +
-  "  ).sum({ total: 'runtime' }).first();\n" +
-  "  const _gameMinutes = (_gameDistinctRow && _gameDistinctRow.total) || 0;\n" +
+  "  // mt-fork: distinct-game-runtime — for video_game expose two stats:\n" +
+  "  //   played*  → distinct games with kind='played' + sum of max IGDB time-to-beat\n" +
+  "  //   watched* → distinct games with kind='watched' + sum of max IGDB time-to-beat\n" +
+  "  // The homepage renders two lines: '(N juegos) Xh Xm jugando' / '...viendo'.\n" +
+  "  const _gameStatsByKind = async (kind) => {\n" +
+  "    const rows = await _dbconfig.Database.knex\n" +
+  "      .select('mediaItem.id', 'mediaItem.runtime')\n" +
+  "      .from('seen')\n" +
+  "      .leftJoin('mediaItem', 'mediaItem.id', 'seen.mediaItemId')\n" +
+  "      .where('seen.userId', userId)\n" +
+  "      .where('seen.kind', kind)\n" +
+  "      .where('mediaItem.mediaType', 'video_game')\n" +
+  "      .distinct();\n" +
+  "    return {\n" +
+  "      items: rows.length,\n" +
+  "      minutes: rows.reduce((acc, r) => acc + (Number(r.runtime) || 0), 0),\n" +
+  "    };\n" +
+  "  };\n" +
+  "  const _gamePlayed = await _gameStatsByKind('played');\n" +
+  "  const _gameWatched = await _gameStatsByKind('watched');\n" +
   "  return (0, _lodash.default)(res).keyBy('mediaType').mapValues(item => ({\n" +
   "    ..._lodash.default.omit(item, ['runtime', 'mediaType']),\n" +
   "    numberOfPages: Math.round(item.numberOfPages),\n" +
   "    duration: Math.round(\n" +
-  "      item.mediaType === 'video_game' ? _gameMinutes :\n" +
+  "      item.mediaType === 'video_game' ? _gamePlayed.minutes :\n" +
   "      item.mediaType === 'book' ? item.duration :\n" +
   "      item.runtime\n" +
-  "    )\n" +
+  "    ),\n" +
+  "    playedItems:    item.mediaType === 'video_game' ? _gamePlayed.items   : undefined,\n" +
+  "    playedDuration: item.mediaType === 'video_game' ? Math.round(_gamePlayed.minutes)  : undefined,\n" +
+  "    watchedItems:   item.mediaType === 'video_game' ? _gameWatched.items  : undefined,\n" +
+  "    watchedDuration:item.mediaType === 'video_game' ? Math.round(_gameWatched.minutes) : undefined,\n" +
   "  })).value();";
 
 c = c.replace(oldRet, newRet);

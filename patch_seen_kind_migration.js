@@ -10,23 +10,15 @@ exports.down = void 0;
 async function up(knex) {
   // Adds a 'kind' column to seen so we can distinguish "actually played" from
   // "watched only" (e.g. someone watching a gameplay video). Default 'played'
-  // preserves prior behavior for items that aren't reclassified.
+  // preserves prior behavior — every existing row stays 'played'. The "Visto"
+  // filter only surfaces items the user has explicitly marked via the
+  // "Marcar como visto" button (which inserts kind='watched').
+  //
+  // (Earlier versions of this migration auto-reclassified rows whose mediaItem
+  // was on the watchlist as 'watched'. That conflated being on the watchlist
+  // with having been explicitly marked as watched, polluting the Visto filter
+  // — removed.)
   await knex.raw("ALTER TABLE seen ADD COLUMN kind TEXT NOT NULL DEFAULT 'played'");
-  // Initial reclassification: rows whose mediaItem is on the user's watchlist
-  // are likely "watched" (eye-clicks added before active play) — mark them so.
-  await knex.raw(\`
-    UPDATE seen SET kind = 'watched'
-    WHERE id IN (
-      SELECT s.id FROM seen s
-      WHERE EXISTS(
-        SELECT 1 FROM listItem li
-        JOIN list l ON l.id = li.listId
-        WHERE l.userId = s.userId AND l.isWatchlist = 1
-          AND li.mediaItemId = s.mediaItemId
-          AND li.seasonId IS NULL AND li.episodeId IS NULL
-      )
-    )
-  \`);
   await knex.raw('CREATE INDEX IF NOT EXISTS seen_kind_index ON seen(kind)');
 }
 async function down(knex) {

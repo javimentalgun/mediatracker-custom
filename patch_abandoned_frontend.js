@@ -31,12 +31,25 @@ const abDef = '_AB=function(e){' +
   'var toggle=function(){' +
     'var url="/api/abandoned/"+mi.id;' +
     'var method=abandoned?"DELETE":"PUT";' +
+    'var willAbandon=!abandoned;' +
     'fetch(url,{method:method,credentials:"same-origin"}).then(function(r){return r.json()}).then(function(){' +
       'setA(!abandoned);' +
+      // When marking as abandoned (not the reverse), also remove from
+      // watchlist — abandoned items don\'t belong on the watchlist.
+      'if(willAbandon){fetch("/api/watchlist?mediaItemId="+mi.id,{method:"DELETE",credentials:"same-origin"}).catch(function(){})}' +
       'try{HW.invalidateQueries(["items"])}catch(_){}; try{HW.invalidateQueries(["details",mi.id])}catch(_){};' +
     '})' +
   '};' +
-  'return r.createElement("div",{className:"text-sm "+(abandoned?"btn":"btn-red"),onClick:toggle},' +
+  // Use the same className+style pattern as "Marcar como completado" (plain
+  // `text-sm btn` + inline-style override for the destructive color) instead
+  // of toggling between btn / btn-red — that toggling produced a row-height
+  // mismatch in the 2-col action grid (the abandoned cell rendered noticeably
+  // taller than its peers).
+  // Outline rojo (borde + texto), sin relleno — coherente con los botones
+  // del modal de progreso (text-red-500 + btn). Se mantiene `text-sm btn`
+  // para no romper la altura de las filas del grid de acciones.
+  'var _destStyle={color:"#dc2626",borderColor:"#dc2626"};' +
+  'return r.createElement("div",{className:"text-sm btn",style:abandoned?{}:_destStyle,onClick:toggle},' +
     'r.createElement(Xe,{id:abandoned?"Resume":"Mark as dropped"})' +
   ')' +
 '},';
@@ -119,6 +132,24 @@ if (c.includes('path:"/abandonados",name:xo._("Dropped")')) {
 } else {
   c = c.replace(menuAnchor, menuPatched);
   console.log('abandoned frontend: added Abandonados menu entry');
+}
+
+// === 7. Add /abandonados to _DD hamburger SIDE_PATHS whitelist ===
+// patch_menu_split.js filters ty() by SIDE_PATHS so only specific paths render
+// in the dropdown. Without this step the entry exists but the dropdown hides it.
+// Use a tolerant regex so we don't break if other patches (eg. downloaded_tab)
+// have already extended the array.
+const sideRe = /\["\/in-progress"[^\]]*"\/lists"[^\]]*\]|\["\/upcoming"[^\]]*"\/watchlist"[^\]]*\]/;
+const sideMatch = c.match(sideRe);
+if (!sideMatch) {
+  console.error('abandoned frontend: SIDE_PATHS array not found'); process.exit(1);
+} else if (sideMatch[0].includes('"/abandonados"')) {
+  console.log('abandoned frontend: /abandonados already in SIDE_PATHS');
+} else {
+  // Insert ,"/abandonados" right before the closing ]
+  const replaced = sideMatch[0].slice(0, -1) + ',"/abandonados"]';
+  c = c.replace(sideMatch[0], replaced);
+  console.log('abandoned frontend: added /abandonados to _DD side dropdown filter');
 }
 
 c = marker + c;
