@@ -56,7 +56,7 @@ Requirements: Docker Engine 20+ and the Compose v2 plugin (`docker compose`, two
 
 ```sh
 # 1. Clone this repo
-git clone https://github.com/javimentalgun/mediatracker-custom.git mediatracker-build
+git clone https://github.com/javimentallab/mediatracker-custom.git mediatracker-build
 cd mediatracker-build
 
 # 2. Stage your compose file from the example

@@ -2,7 +2,7 @@ const fs = require('fs');
 const bundlePath = require('child_process').execSync('ls /app/public/main_*.js | grep -v "\\.LICENSE\\|\\.map"').toString().trim();
 let c = fs.readFileSync(bundlePath, 'utf8');
 
-const NEW_NAME = 'javimentalgun.mediatracker';
+const NEW_NAME = 'javimentallab.mediatracker';
 const TAGLINE = 'built comfortably but with dedication with Claude Opus';
 
 const fresh = 'Wy=function(){var e=Ap().configuration;return r.createElement(r.Fragment,null,' +
