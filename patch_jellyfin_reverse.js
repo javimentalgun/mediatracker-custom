@@ -35,7 +35,7 @@ const helper = "\n" +
 "      if (!lr.ok) return;\n" +
 "      const lj = await lr.json();\n" +
 "      entry = { at: Date.now(), items: lj.Items || [] };\n" +
-"      global._jfReverseCache.set(cacheKey, entry);\n" +
+"      global._jfReverseCache.set(cacheKey, entry); if (global._jfReverseCache.size > 1000) global._jfReverseCache.delete(global._jfReverseCache.keys().next().value);\n" +
 "    }\n" +
 "    let target = null;\n" +
 "    const matched = entry.items.find(it => {\n" +

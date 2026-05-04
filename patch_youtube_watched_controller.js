@@ -35,7 +35,7 @@ const method = `  _ytParseDuration = (iso) => {
   _ytRefreshToken = async (data, file) => {
     // Refresh the OAuth access token if it's expired (or expires in <60s).
     // Mutates and persists \`data.auth\`. Returns the access token.
-    const fs = require('fs');
+    const fs = require('fs').promises;
     if (!data.auth || !data.auth.refreshToken) throw new Error('Google OAuth not connected (Settings → YouTube)');
     if (Date.now() < (data.auth.expiresAt - 60000)) return data.auth.accessToken;
     const r = await fetch('https://oauth2.googleapis.com/token', {
@@ -51,11 +51,11 @@ const method = `  _ytParseDuration = (iso) => {
     if (t.error) throw new Error('refresh failed: ' + (t.error_description || t.error));
     data.auth.accessToken = t.access_token;
     data.auth.expiresAt = Date.now() + (t.expires_in || 3600) * 1000;
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); }
     return t.access_token;
   };
   youtubeMarkWatched = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     if (!userId) { res.status(401).json({ error: 'unauthenticated' }); return; }
     const file = '/storage/youtube-' + userId + '.json';
@@ -63,7 +63,7 @@ const method = `  _ytParseDuration = (iso) => {
     const videoId = String(body.videoId || '').trim();
     if (!videoId || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) { res.status(400).json({ error: 'videoId requerido (11 chars)' }); return; }
     let data = { channels: [], watched: [] };
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     if (!Array.isArray(data.watched)) data.watched = [];
     if (data.watched.find(w => w.videoId === videoId)) {
       res.json({ ok: true, alreadyMarked: true });
@@ -112,34 +112,34 @@ const method = `  _ytParseDuration = (iso) => {
       durationSeconds,
       watchedAt: Date.now()
     });
-    try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+    try { { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); } }
     catch (e) { res.status(500).json({ error: 'persist failed: ' + e.message }); return; }
     res.json({ ok: true, durationSeconds });
   });
   youtubeUnmarkWatched = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     if (!userId) { res.status(401).json({ error: 'unauthenticated' }); return; }
     const file = '/storage/youtube-' + userId + '.json';
     const videoId = String(req.params.videoId || '').trim();
     if (!videoId) { res.status(400).json({ error: 'videoId requerido' }); return; }
     let data = { channels: [], watched: [] };
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     if (!Array.isArray(data.watched)) data.watched = [];
     const before = data.watched.length;
     data.watched = data.watched.filter(w => w.videoId !== videoId);
     if (data.watched.length === before) { res.status(404).json({ error: 'no marcado' }); return; }
-    try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+    try { { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); } }
     catch (e) { res.status(500).json({ error: e.message }); return; }
     res.json({ ok: true });
   });
   youtubeWatchedStats = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     if (!userId) { res.status(401).json({ error: 'unauthenticated' }); return; }
     const file = '/storage/youtube-' + userId + '.json';
     let data = { channels: [], watched: [] };
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     const arr = Array.isArray(data.watched) ? data.watched : [];
     const totalSeconds = arr.reduce((sum, w) => sum + (Number(w.durationSeconds) || 0), 0);
     res.json({ count: arr.length, totalSeconds, totalMinutes: Math.round(totalSeconds / 60), videoIds: arr.map(w => w.videoId) });

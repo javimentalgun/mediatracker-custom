@@ -34,7 +34,7 @@ const method = `  youtubeOauthStart = (0, _typescriptRoutesToOpenapiServer.creat
     res.redirect(url);
   });
   youtubeOauthCallback = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const reqUserId = Number(req.user);
     if (!reqUserId) { res.status(401).send('unauthenticated — log in to MediaTracker first and retry'); return; }
     const code = req.query.code;
@@ -69,7 +69,7 @@ const method = `  youtubeOauthStart = (0, _typescriptRoutesToOpenapiServer.creat
     } catch (_) {}
     const file = '/storage/youtube-' + reqUserId + '.json';
     let data = { channels: [] };
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     data.auth = {
       accessToken: tokens.access_token,
       // Keep prior refresh_token if Google didn't issue a new one (e.g. re-consent without prompt=consent)
@@ -78,24 +78,24 @@ const method = `  youtubeOauthStart = (0, _typescriptRoutesToOpenapiServer.creat
       email: email,
       connectedAt: Date.now()
     };
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); }
     res.redirect('/#/youtube');
   });
   youtubeOauthStatus = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     const file = '/storage/youtube-' + userId + '.json';
     let data = {};
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     if (!data.auth || !data.auth.refreshToken) { res.json({ connected: false }); return; }
     res.json({ connected: true, email: data.auth.email || null, connectedAt: data.auth.connectedAt || null });
   });
   youtubeOauthSync = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     const file = '/storage/youtube-' + userId + '.json';
     let data = { channels: [] };
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     if (!data.auth || !data.auth.refreshToken) { res.status(400).json({ error: 'not connected' }); return; }
     let accessToken = data.auth.accessToken;
     // Refresh if expired (or about to in <60s)
@@ -114,7 +114,7 @@ const method = `  youtubeOauthStart = (0, _typescriptRoutesToOpenapiServer.creat
       accessToken = t.access_token;
       data.auth.accessToken = accessToken;
       data.auth.expiresAt = Date.now() + (t.expires_in || 3600) * 1000;
-      fs.writeFileSync(file, JSON.stringify(data, null, 2));
+      { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); }
     }
     // Paginate subscriptions (50 per page, cap at 1000 total = 20 pages)
     const subs = [];
@@ -140,20 +140,20 @@ const method = `  youtubeOauthStart = (0, _typescriptRoutesToOpenapiServer.creat
         added++;
       }
     }
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); }
     res.json({ ok: true, total: subs.length, added: added, skipped: subs.length - added });
   });
   youtubeOauthDelete = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
-    const fs = require('fs');
+    const fs = require('fs').promises;
     const userId = Number(req.user);
     const file = '/storage/youtube-' + userId + '.json';
     let data = {};
-    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); } catch (_) {}
     if (data.auth && data.auth.refreshToken) {
       try { await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(data.auth.refreshToken), { method: 'POST' }); } catch (_) {}
     }
     delete data.auth;
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    { const _wTmp = file + '.tmp.' + process.pid; await fs.writeFile(_wTmp, JSON.stringify(data, null, 2)); await fs.rename(_wTmp, file); }
     res.json({ ok: true });
   });
 `;

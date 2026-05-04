@@ -10,7 +10,7 @@ if (c.includes('jellyfinSync') && c.includes('jellyfinLookup') && c.includes('je
 // `this` works because class field arrow functions bind to the instance.
 const method =
 "  jellyfinFetch = async (subpath) => {\n" +
-"    const fs = require('fs');\n" +
+"    const fs = require('fs').promises;\n" +
 "    const url = process.env.JELLYFIN_URL;\n" +
 "    const token = process.env.JELLYFIN_API_KEY;\n" +
 "    if (!url || !token) throw new Error('Jellyfin not configured (set JELLYFIN_URL and JELLYFIN_API_KEY in docker-compose.yml)');\n" +
@@ -26,12 +26,12 @@ const method =
 "    return users[0].Id;\n" +
 "  };\n" +
 "  jellyfinStatus = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {\n" +
-"    const fs = require('fs');\n" +
+"    const fs = require('fs').promises;\n" +
 "    const url = process.env.JELLYFIN_URL;\n" +
 "    const token = process.env.JELLYFIN_API_KEY;\n" +
 "    if (!url || !token) { res.json({ configured: false }); return; }\n" +
 "    let state = {};\n" +
-"    try { state = JSON.parse(fs.readFileSync('/storage/jellyfin-state.json', 'utf8')); } catch (_) {}\n" +
+"    try { state = JSON.parse(await fs.readFile('/storage/jellyfin-state.json', 'utf8')); } catch (_) {}\n" +
 "    try {\n" +
 "      const info = await this.jellyfinFetch('/System/Info');\n" +
 "      const userId = await this.jellyfinUserId();\n" +
@@ -41,7 +41,7 @@ const method =
 "    }\n" +
 "  });\n" +
 "  jellyfinSync = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {\n" +
-"    const fs = require('fs');\n" +
+"    const fs = require('fs').promises;\n" +
 "    const userId = Number(req.user);\n" +
 "    const knex = _dbconfig.Database.knex;\n" +
 "    try {\n" +
@@ -89,7 +89,7 @@ const method =
 "        } else { unmatched++; }\n" +
 "      }\n" +
 "      const state = { lastSync: new Date().toISOString(), lastImported: imported, lastSkipped: skipped, lastUnmatched: unmatched, lastTotal: items.length };\n" +
-"      try { fs.writeFileSync('/storage/jellyfin-state.json', JSON.stringify(state)); } catch (_) {}\n" +
+"      try { { const _t='/storage/jellyfin-state.json.tmp.'+process.pid; await fs.writeFile(_t,JSON.stringify(state)); await fs.rename(_t,'/storage/jellyfin-state.json'); }; } catch (_) {}\n" +
 "      res.json(Object.assign({ ok: true }, state));\n" +
 "    } catch (e) {\n" +
 "      res.status(500).json({ error: e.message });\n" +
@@ -139,7 +139,7 @@ const method =
 "          if (p.Tvdb) tvdb.push(String(p.Tvdb));\n" +
 "        });\n" +
 "        entry = { at: now, ids: { tmdb, imdb, tvdb } };\n" +
-"        global._jfLibCache.set(cacheKey, entry);\n" +
+"        global._jfLibCache.set(cacheKey, entry); if (global._jfLibCache.size > 1000) global._jfLibCache.delete(global._jfLibCache.keys().next().value);\n" +
 "      }\n" +
 "      res.json(entry.ids);\n" +
 "    } catch (e) {\n" +
@@ -166,7 +166,7 @@ const method =
 "      if (!entry || (now - entry.at) > 5 * 60 * 1000) {\n" +
 "        const list = await this.jellyfinFetch('/Users/' + userId + '/Items?Recursive=true&IncludeItemTypes=' + types + '&Fields=ProviderIds&Limit=10000');\n" +
 "        entry = { at: now, items: list.Items || [] };\n" +
-"        global._jfLookupCache.set(cacheKey, entry);\n" +
+"        global._jfLookupCache.set(cacheKey, entry); if (global._jfLookupCache.size > 1000) global._jfLookupCache.delete(global._jfLookupCache.keys().next().value);\n" +
 "      }\n" +
 "      const item = entry.items.find(it => {\n" +
 "        const p = it.ProviderIds || {};\n" +
