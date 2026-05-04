@@ -14,9 +14,9 @@ services:
       - "7481:7481"
     volumes:
       # Persistent data — /storage/data.db lives here.
-      - ./mediatracker-data:/storage
-      # Image cache — bind-mounted so MT-served images survive container rebuilds.
-      - ./mediatracker-assets:/assets
+      - ./mediatoc-data:/storage
+      # Image cache — bind-mounted so server-side images survive container rebuilds.
+      - ./mediatoc-assets:/assets
     environment:
       # --- Jellyfin integration (optional) ---
       # If set, MT can sync seen status with Jellyfin and show "Available on Jellyfin" badges.

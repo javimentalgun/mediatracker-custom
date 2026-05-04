@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = '/app/build/server.js';
 let c = fs.readFileSync(path, 'utf8');
 
-// express.json() defaults to 100KB. Our JSON imports (mediatracker-export-*.json)
+// express.json() defaults to 100KB. Our JSON imports (mediatoc-export-*.json)
 // can easily reach 10-50MB on a populated library. Bump the limit so /api/backup/import
 // stops returning PayloadTooLargeError.
 const old = "this.#app.use(_express.default.json());";

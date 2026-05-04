@@ -48,7 +48,7 @@ maps them to keys translatable across the 7 locales MediaTracker ships with.
 2. Bump the `marker` field in the `LOCALES` array of the same file to a substring guaranteed
    to be present only with the new key. This forces re-injection over already-patched bundles.
 3. Replace the hardcoded string in whichever feature patch needs it with `xo._("New Key")`.
-4. Rebuild: `docker compose build mediatracker && docker compose up -d mediatracker`.
+4. Rebuild: `docker compose build mediatoc && docker compose up -d mediatoc`.
 
 ## Still hardcoded (dynamic interpolations)
 

@@ -19,7 +19,7 @@ const compDef = `_BK=function(){` +
     `fetch("/api/backup/restore",{method:"POST",credentials:"same-origin",body:_file,headers:{"Content-Type":"application/octet-stream"}})` +
       `.then(function(r){return r.json()})` +
       `.then(function(d){` +
-        `if(d.ok){_setStatus({type:"success",msg:"Subido OK ("+d.size+" bytes). Reinicia el contenedor: docker compose restart mediatracker (luego el archivo data.db.uploaded sustituirá al actual)."})}` +
+        `if(d.ok){_setStatus({type:"success",msg:"Subido OK ("+d.size+" bytes). Reinicia el contenedor: docker compose restart mediatoc (luego el archivo data.db.uploaded sustituirá al actual)."})}` +
         `else{_setStatus({type:"error",msg:d.error||"Error desconocido"})}` +
       `})` +
       `.catch(function(e){_setStatus({type:"error",msg:String(e.message||e)})});` +

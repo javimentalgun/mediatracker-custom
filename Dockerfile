@@ -571,7 +571,7 @@ COPY patch_youtube_routes.js /tmp/patch_youtube_routes.js
 RUN node /tmp/patch_youtube_routes.js
 
 # express.json() body limit raised from 100KB default to 100MB so /api/backup/import
-# can accept full mediatracker-export-*.json files (10-50MB on populated libraries).
+# can accept full mediatoc-export-*.json files (10-50MB on populated libraries).
 COPY patch_body_limit.js /tmp/patch_body_limit.js
 RUN node /tmp/patch_body_limit.js
 

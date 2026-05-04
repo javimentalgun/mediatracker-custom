@@ -24,7 +24,7 @@ if (c.includes(marker)) {
 }
 
 // === 1. Remove the in-nav page-title block entirely ===
-// Original mediatracker rendered `<div className="md:hidden">{currentPagePathName}</div>`
+// Base image rendered `<div className="md:hidden">{currentPagePathName}</div>`
 // in ny() so on mobile the user could see which page they were on. We removed
 // it: on desktop the hamburger menu + URL identifies the section just fine,
 // and showing "Abandonados" / "Pendiente" / etc. to the right of the top nav

@@ -12,7 +12,7 @@ c = c.replace(/  exportLetterboxd = \(0, _typescriptRoutesToOpenapiServer\.creat
 const method = `  downloadBackup = (0, _typescriptRoutesToOpenapiServer.createExpressRoute)(async (req, res) => {
     const dbPath = '/storage/data.db';
     const date = new Date().toISOString().slice(0, 10);
-    res.download(dbPath, \`mediatracker-backup-\${date}.db\`, (err) => {
+    res.download(dbPath, \`mediatoc-backup-\${date}.db\`, (err) => {
       if (err && !res.headersSent) { res.status(500).send('backup failed'); }
     });
   });
@@ -48,7 +48,7 @@ const method = `  downloadBackup = (0, _typescriptRoutesToOpenapiServer.createEx
       episodes
     };
     const date = new Date().toISOString().slice(0,10);
-    res.setHeader('Content-Disposition', 'attachment; filename="mediatracker-export-' + date + '.json"');
+    res.setHeader('Content-Disposition', 'attachment; filename="mediatoc-export-' + date + '.json"');
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(out, null, 2));
   });

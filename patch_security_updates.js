@@ -1,6 +1,6 @@
 // Security updates for CVE-flagged dependencies (HIGH/CRITICAL).
 //
-// Detected via Trivy scan on bonukai/mediatracker:latest:
+// Detected via Trivy scan on the base image:
 //   - axios            0.29.0 → 0.30.0   (CVE-2025-27152, CVE-2025-58754, CVE-2026-25639) — HIGH SSRF/DoS
 //   - fast-xml-parser  4.5.1  → 4.5.5    (CVE-2026-25896) — CRITICAL XSS via DOCTYPE
 //   - form-data        4.0.1  → 4.0.4    (CVE-2025-7783) — CRITICAL unsafe random
