@@ -12,9 +12,9 @@ const bundleHash = crypto.createHash('sha1').update(fs.readFileSync(bundlePath))
 
 // ---------- 1. manifest.json ----------
 const manifest = {
-  name: "MediaTracker",
-  short_name: "MediaTracker",
-  description: "Self-hosted media tracker (películas, series, libros, juegos)",
+  name: "MediaTOC",
+  short_name: "MediaTOC",
+  description: "Self-hosted media tracker for completionists",
   start_url: "/",
   scope: "/",
   display: "standalone",
@@ -34,7 +34,7 @@ console.log('pwa: wrote manifest.json');
 // ---------- 2. sw.js (service worker) ----------
 // Cache version is tied to the bundle filename — when the bundle hash changes, a new SW
 // activates and old caches are evicted. No manual bumping needed.
-const swCode = `// MediaTracker service worker — generated at build time
+const swCode = `// MediaTOC service worker — generated at build time
 const VERSION = ${JSON.stringify(bundleName + '-' + bundleHash + '-' + Date.now())};
 const STATIC_CACHE = 'mt-static-' + VERSION;
 const RUNTIME_CACHE = 'mt-runtime-' + VERSION;

@@ -907,6 +907,12 @@ RUN node /tmp/patch_jellyfin_import_buttons.js
 COPY patch_bundle_rename.js /tmp/patch_bundle_rename.js
 RUN node /tmp/patch_bundle_rename.js
 
+# index.html <title>Media Tracker</title> → MediaTOC. Touches the static
+# entrypoint; safe to run anywhere after the upstream build has produced
+# /app/public/index.html.
+COPY patch_index_html_title.js /tmp/patch_index_html_title.js
+RUN node /tmp/patch_index_html_title.js
+
 # PWA: manifest.json + service worker (offline cache + faster subsequent loads).
 # Runs after rename so the SW caches the FINAL hashed filename.
 COPY patch_pwa.js /tmp/patch_pwa.js
