@@ -152,52 +152,129 @@ const method = `  downloadBackup = (0, _typescriptRoutesToOpenapiServer.createEx
       }
     }
 
+    // Steps 4-7 refactored: bulk dedup-and-insert for listItem/seen/userRating/progress.
+    // Was N×.first() + N inserts per table; now 1 bulk SELECT + 1 chunked INSERT
+    // per table. SQLite param limit is 999 so we chunk inserts at 100 rows.
+    const _bulkInsert = async (table, rows) => {
+      const CHUNK = 100;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        await knex(table).insert(rows.slice(i, i + CHUNK));
+      }
+    };
+
     // 4. List items
-    for (const li of (data.listItems || [])) {
-      const newMI = mediaItemMap.get(li.mediaItemId);
-      const newList = listMap.get(li.listId);
-      if (!newMI || !newList) { stats.listItemsSkipped++; continue; }
-      const exists = await knex('listItem').where({ listId: newList, mediaItemId: newMI, seasonId: li.seasonId || null, episodeId: li.episodeId || null }).first();
-      if (exists) { stats.listItemsSkipped++; continue; }
-      await knex('listItem').insert({ listId: newList, mediaItemId: newMI, seasonId: li.seasonId || null, episodeId: li.episodeId || null, addedAt: li.addedAt || Date.now() });
-      stats.listItemsImported++;
+    {
+      const valid = [];
+      let skipped = 0;
+      for (const li of (data.listItems || [])) {
+        const newMI = mediaItemMap.get(li.mediaItemId);
+        const newList = listMap.get(li.listId);
+        if (!newMI || !newList) { skipped++; continue; }
+        valid.push({ li, newMI, newList });
+      }
+      if (valid.length > 0) {
+        const listIds = [...new Set(valid.map(v => v.newList))];
+        const miIds = [...new Set(valid.map(v => v.newMI))];
+        const existing = await knex('listItem').whereIn('listId', listIds).whereIn('mediaItemId', miIds).select('listId','mediaItemId','seasonId','episodeId');
+        const existingSet = new Set(existing.map(e => e.listId+'|'+e.mediaItemId+'|'+(e.seasonId||'')+'|'+(e.episodeId||'')));
+        const toInsert = [];
+        for (const v of valid) {
+          const key = v.newList+'|'+v.newMI+'|'+(v.li.seasonId||'')+'|'+(v.li.episodeId||'');
+          if (existingSet.has(key)) { skipped++; continue; }
+          existingSet.add(key);
+          toInsert.push({ listId: v.newList, mediaItemId: v.newMI, seasonId: v.li.seasonId || null, episodeId: v.li.episodeId || null, addedAt: v.li.addedAt || Date.now() });
+        }
+        if (toInsert.length) await _bulkInsert('listItem', toInsert);
+        stats.listItemsImported = toInsert.length;
+      }
+      stats.listItemsSkipped = skipped;
     }
 
     // 5. Seen
-    for (const s of (data.seen || [])) {
-      const newMI = mediaItemMap.get(s.mediaItemId);
-      if (!newMI) { stats.seenMissing++; continue; }
-      let newEp = null;
-      if (s.episodeId) {
-        newEp = episodeMap.get(s.episodeId);
-        if (!newEp) { stats.seenMissing++; continue; }
+    {
+      const valid = [];
+      let missing = 0;
+      for (const s of (data.seen || [])) {
+        const newMI = mediaItemMap.get(s.mediaItemId);
+        if (!newMI) { missing++; continue; }
+        let newEp = null;
+        if (s.episodeId) {
+          newEp = episodeMap.get(s.episodeId);
+          if (!newEp) { missing++; continue; }
+        }
+        valid.push({ s, newMI, newEp });
       }
-      const exists = await knex('seen').where({ userId, mediaItemId: newMI, episodeId: newEp || null, date: s.date }).first();
-      if (exists) { stats.seenSkipped++; continue; }
-      await knex('seen').insert({ userId, mediaItemId: newMI, episodeId: newEp || null, date: s.date, duration: s.duration || null });
-      stats.seenImported++;
+      let skipped = 0;
+      if (valid.length > 0) {
+        const miIds = [...new Set(valid.map(v => v.newMI))];
+        const existing = await knex('seen').where('userId', userId).whereIn('mediaItemId', miIds).select('mediaItemId','episodeId','date');
+        const existingSet = new Set(existing.map(e => e.mediaItemId+'|'+(e.episodeId||'')+'|'+e.date));
+        const toInsert = [];
+        for (const v of valid) {
+          const key = v.newMI+'|'+(v.newEp||'')+'|'+v.s.date;
+          if (existingSet.has(key)) { skipped++; continue; }
+          existingSet.add(key);
+          toInsert.push({ userId, mediaItemId: v.newMI, episodeId: v.newEp || null, date: v.s.date, duration: v.s.duration || null });
+        }
+        if (toInsert.length) await _bulkInsert('seen', toInsert);
+        stats.seenImported = toInsert.length;
+      }
+      stats.seenSkipped = skipped;
+      stats.seenMissing = missing;
     }
 
     // 6. Ratings
-    for (const r of (data.ratings || [])) {
-      const newMI = mediaItemMap.get(r.mediaItemId);
-      if (!newMI) continue;
-      const exists = await knex('userRating').where({ userId, mediaItemId: newMI, seasonId: r.seasonId || null, episodeId: r.episodeId || null }).first();
-      if (exists) { stats.ratingsSkipped++; continue; }
-      await knex('userRating').insert({ userId, mediaItemId: newMI, seasonId: r.seasonId || null, episodeId: r.episodeId || null, rating: r.rating, review: r.review || null, date: r.date || Date.now() });
-      stats.ratingsImported++;
+    {
+      const valid = [];
+      for (const r of (data.ratings || [])) {
+        const newMI = mediaItemMap.get(r.mediaItemId);
+        if (!newMI) continue;
+        valid.push({ r, newMI });
+      }
+      let skipped = 0;
+      if (valid.length > 0) {
+        const miIds = [...new Set(valid.map(v => v.newMI))];
+        const existing = await knex('userRating').where('userId', userId).whereIn('mediaItemId', miIds).select('mediaItemId','seasonId','episodeId');
+        const existingSet = new Set(existing.map(e => e.mediaItemId+'|'+(e.seasonId||'')+'|'+(e.episodeId||'')));
+        const toInsert = [];
+        for (const v of valid) {
+          const key = v.newMI+'|'+(v.r.seasonId||'')+'|'+(v.r.episodeId||'');
+          if (existingSet.has(key)) { skipped++; continue; }
+          existingSet.add(key);
+          toInsert.push({ userId, mediaItemId: v.newMI, seasonId: v.r.seasonId || null, episodeId: v.r.episodeId || null, rating: v.r.rating, review: v.r.review || null, date: v.r.date || Date.now() });
+        }
+        if (toInsert.length) await _bulkInsert('userRating', toInsert);
+        stats.ratingsImported = toInsert.length;
+      }
+      stats.ratingsSkipped = skipped;
     }
 
     // 7. Progress
-    for (const p of (data.progress || [])) {
-      const newMI = mediaItemMap.get(p.mediaItemId);
-      if (!newMI) continue;
-      const newEp = p.episodeId ? episodeMap.get(p.episodeId) : null;
-      if (p.episodeId && !newEp) continue;
-      const exists = await knex('progress').where({ userId, mediaItemId: newMI, episodeId: newEp || null }).first();
-      if (exists) { stats.progressSkipped++; continue; }
-      await knex('progress').insert({ userId, mediaItemId: newMI, episodeId: newEp || null, progress: p.progress, date: p.date || Date.now(), duration: p.duration || null, action: p.action || null });
-      stats.progressImported++;
+    {
+      const valid = [];
+      for (const p of (data.progress || [])) {
+        const newMI = mediaItemMap.get(p.mediaItemId);
+        if (!newMI) continue;
+        const newEp = p.episodeId ? episodeMap.get(p.episodeId) : null;
+        if (p.episodeId && !newEp) continue;
+        valid.push({ p, newMI, newEp });
+      }
+      let skipped = 0;
+      if (valid.length > 0) {
+        const miIds = [...new Set(valid.map(v => v.newMI))];
+        const existing = await knex('progress').where('userId', userId).whereIn('mediaItemId', miIds).select('mediaItemId','episodeId');
+        const existingSet = new Set(existing.map(e => e.mediaItemId+'|'+(e.episodeId||'')));
+        const toInsert = [];
+        for (const v of valid) {
+          const key = v.newMI+'|'+(v.newEp||'');
+          if (existingSet.has(key)) { skipped++; continue; }
+          existingSet.add(key);
+          toInsert.push({ userId, mediaItemId: v.newMI, episodeId: v.newEp || null, progress: v.p.progress, date: v.p.date || Date.now(), duration: v.p.duration || null, action: v.p.action || null });
+        }
+        if (toInsert.length) await _bulkInsert('progress', toInsert);
+        stats.progressImported = toInsert.length;
+      }
+      stats.progressSkipped = skipped;
     }
 
     res.json({ ok: true, ...stats });

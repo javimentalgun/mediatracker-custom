@@ -35,13 +35,19 @@ const newFn =
   "        if (!igdb) return;\n" +
   "        _logger.logger.info('mt-fork: auto-refreshing IGDB time-to-beat for ' + games.length + ' game(s) without runtime');\n" +
   "        let updated = 0, missing = 0, failed = 0;\n" +
-  "        for (const g of games) {\n" +
-  "          let ttb = null;\n" +
-  "          try { ttb = await igdb.gameTimeToBeat(g.igdbId); }\n" +
-  "          catch (_) { failed++; continue; }\n" +
-  "          if (!ttb) { missing++; continue; }\n" +
-  "          try { await knex('mediaItem').where('id', g.id).update({ runtime: ttb }); updated++; }\n" +
-  "          catch (_) { failed++; }\n" +
+  "        // Process in batches of 5 in parallel — drops total time from ~250ms*N to ~250ms*(N/5).\n" +
+  "        // Going wider risks IGDB rate-limiting the user's app credentials.\n" +
+  "        const BATCH = 5;\n" +
+  "        for (let i = 0; i < games.length; i += BATCH) {\n" +
+  "          const slice = games.slice(i, i + BATCH);\n" +
+  "          await Promise.all(slice.map(async g => {\n" +
+  "            let ttb = null;\n" +
+  "            try { ttb = await igdb.gameTimeToBeat(g.igdbId); }\n" +
+  "            catch (_) { failed++; return; }\n" +
+  "            if (!ttb) { missing++; return; }\n" +
+  "            try { await knex('mediaItem').where('id', g.id).update({ runtime: ttb }); updated++; }\n" +
+  "            catch (_) { failed++; }\n" +
+  "          }));\n" +
   "        }\n" +
   "        _logger.logger.info('mt-fork: auto-refresh done — updated=' + updated + ', missing=' + missing + ', failed=' + failed);\n" +
   "      } catch (e) {\n" +

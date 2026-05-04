@@ -11,9 +11,9 @@ if (!c.includes(anchor)) { console.error('backup routes: anchor not found'); pro
 
 const route = `router.get('/api/backup', validatorHandler({}), _MediaItemController.downloadBackup);
 router.get('/api/backup/export-json', validatorHandler({}), _MediaItemController.exportJson);
-router.post('/api/backup/import', _MediaItemController.importJson);
+router.post('/api/backup/import', validatorHandler({}), _MediaItemController.importJson);
 router.get('/api/backup/letterboxd', validatorHandler({}), _MediaItemController.exportLetterboxd);
-router.post('/api/backup/restore', _MediaItemController.restoreBackup);
+router.post('/api/backup/restore', validatorHandler({}), _MediaItemController.restoreBackup);
 `;
 
 c = c.replace(anchor, route + anchor);

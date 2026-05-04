@@ -8,7 +8,15 @@ const method = `  fetchEpisodeRuntimes = (0, _typescriptRoutesToOpenapiServer.cr
     const { mediaItemId } = req.query;
     const item = await _dbconfig.Database.knex('mediaItem').select('id','tmdbId','mediaType').where('id', mediaItemId).first();
     if (!item || item.mediaType !== 'tv' || !item.tmdbId) { res.status(400).json({error:'Item must be a TV show with tmdbId'}); return; }
-    const TMDB_KEY = '779734046efc1e6127485c54d3b29627';
+    // Resolve TMDB key: env var first, then user-stored UI key in /storage/tmdb-key.json.
+    let TMDB_KEY = process.env.TMDB_API_KEY;
+    if (!TMDB_KEY) {
+      try { TMDB_KEY = (JSON.parse(require('fs').readFileSync('/storage/tmdb-key.json','utf8')).apiKey || '').trim() || null; } catch(_) { TMDB_KEY = null; }
+    }
+    if (!TMDB_KEY) {
+      res.status(503).json({ error: 'TMDB API key no configurada. Pégala en Tokens de aplicación (Tokens TMDB) o define TMDB_API_KEY en docker-compose.yml.' });
+      return;
+    }
     const https = require('https');
     const fetchSeason = (sn) => new Promise((ok, fail) => {
       const url = \`https://api.themoviedb.org/3/tv/\${item.tmdbId}/season/\${sn}?api_key=\${TMDB_KEY}\`;

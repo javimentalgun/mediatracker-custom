@@ -26,20 +26,20 @@ const method = `  findDupes = (0, _typescriptRoutesToOpenapiServer.createExpress
       const distinctImdb = new Set(items.map(i => i.imdbId).filter(Boolean));
       // True dupes have at least one distinct external ID
       if (distinctTmdb.size <= 1 && distinctImdb.size <= 1 && items.every(i => !i.tmdbId && !i.imdbId)) continue;
-      // Annotate with usage so the UI can suggest the "winner"
-      for (const it of items) {
-        const counts = await knex.raw(\`
-          SELECT
-            (SELECT COUNT(*) FROM seen WHERE mediaItemId = ?) as seen,
-            (SELECT COUNT(*) FROM userRating WHERE mediaItemId = ?) as rating,
-            (SELECT COUNT(*) FROM progress WHERE mediaItemId = ?) as progress,
-            (SELECT COUNT(*) FROM listItem WHERE mediaItemId = ?) as list
-        \`, [it.id, it.id, it.id, it.id]);
-        const c0 = counts[0] || counts;
-        it.usage = (c0.seen || 0) + (c0.rating || 0) + (c0.progress || 0) + (c0.list || 0);
-      }
-      items.sort((a, b) => b.usage - a.usage);
       dupes.push({ key, items });
+    }
+    // Bulk-load usage counts for ALL dupe items in 4 grouped queries (was 4×N).
+    const allIds = dupes.flatMap(d => d.items.map(i => i.id));
+    const usage = new Map();
+    if (allIds.length > 0) {
+      const fetchCounts = async (table) => knex(table).whereIn('mediaItemId', allIds).groupBy('mediaItemId').select('mediaItemId').count('* as c');
+      const [s, r, p, l] = await Promise.all([fetchCounts('seen'), fetchCounts('userRating'), fetchCounts('progress'), fetchCounts('listItem')]);
+      const add = (rows) => { for (const r of rows) usage.set(r.mediaItemId, (usage.get(r.mediaItemId) || 0) + Number(r.c || 0)); };
+      add(s); add(r); add(p); add(l);
+    }
+    for (const d of dupes) {
+      for (const it of d.items) it.usage = usage.get(it.id) || 0;
+      d.items.sort((a, b) => b.usage - a.usage);
     }
     res.json({ count: dupes.length, dupes });
   });
@@ -52,39 +52,28 @@ const method = `  findDupes = (0, _typescriptRoutesToOpenapiServer.createExpress
     if (!w || !l) { res.status(404).json({ error: 'mediaItem no encontrado' }); return; }
     if (w.mediaType !== l.mediaType) { res.status(400).json({ error: 'mediaTypes distintos — no se puede fusionar' }); return; }
     const stats = { seen: 0, ratings: 0, progress: 0, listItems: 0 };
+    // Helper: bulk-merge a child table — load loser/winner rows once, classify
+    // each loser row as conflict (delete) or unique (re-assign), then batch
+    // delete + batch update. 2 reads + 2 writes per table instead of N reads + N writes.
+    const _bulkMerge = async (trx, table, keyFn) => {
+      const loserRows = await trx(table).where('mediaItemId', loserId);
+      if (loserRows.length === 0) return 0;
+      const winnerRows = await trx(table).where('mediaItemId', winnerId);
+      const winnerKeys = new Set(winnerRows.map(keyFn));
+      const toDelete = [], toReassign = [];
+      for (const r of loserRows) {
+        if (winnerKeys.has(keyFn(r))) toDelete.push(r.id);
+        else toReassign.push(r.id);
+      }
+      if (toDelete.length) await trx(table).whereIn('id', toDelete).delete();
+      if (toReassign.length) await trx(table).whereIn('id', toReassign).update({ mediaItemId: winnerId });
+      return toReassign.length;
+    };
     await knex.transaction(async trx => {
-      // Move seen rows. Skip rows that would conflict on (userId, mediaItemId, episodeId, date).
-      const seenRows = await trx('seen').where('mediaItemId', loserId);
-      for (const s of seenRows) {
-        const exists = await trx('seen').where({ userId: s.userId, mediaItemId: winnerId, episodeId: s.episodeId, date: s.date }).first();
-        if (exists) { await trx('seen').where('id', s.id).delete(); continue; }
-        await trx('seen').where('id', s.id).update({ mediaItemId: winnerId });
-        stats.seen++;
-      }
-      // userRating: dedup by (userId, mediaItemId, seasonId, episodeId)
-      const ratings = await trx('userRating').where('mediaItemId', loserId);
-      for (const r of ratings) {
-        const exists = await trx('userRating').where({ userId: r.userId, mediaItemId: winnerId, seasonId: r.seasonId, episodeId: r.episodeId }).first();
-        if (exists) { await trx('userRating').where('id', r.id).delete(); continue; }
-        await trx('userRating').where('id', r.id).update({ mediaItemId: winnerId });
-        stats.ratings++;
-      }
-      // progress: dedup by (userId, mediaItemId, episodeId)
-      const progs = await trx('progress').where('mediaItemId', loserId);
-      for (const p of progs) {
-        const exists = await trx('progress').where({ userId: p.userId, mediaItemId: winnerId, episodeId: p.episodeId }).first();
-        if (exists) { await trx('progress').where('id', p.id).delete(); continue; }
-        await trx('progress').where('id', p.id).update({ mediaItemId: winnerId });
-        stats.progress++;
-      }
-      // listItem: dedup by (listId, mediaItemId, seasonId, episodeId)
-      const lis = await trx('listItem').where('mediaItemId', loserId);
-      for (const li of lis) {
-        const exists = await trx('listItem').where({ listId: li.listId, mediaItemId: winnerId, seasonId: li.seasonId, episodeId: li.episodeId }).first();
-        if (exists) { await trx('listItem').where('id', li.id).delete(); continue; }
-        await trx('listItem').where('id', li.id).update({ mediaItemId: winnerId });
-        stats.listItems++;
-      }
+      stats.seen      = await _bulkMerge(trx, 'seen',       r => r.userId + '|' + (r.episodeId || '') + '|' + r.date);
+      stats.ratings   = await _bulkMerge(trx, 'userRating', r => r.userId + '|' + (r.seasonId || '') + '|' + (r.episodeId || ''));
+      stats.progress  = await _bulkMerge(trx, 'progress',   r => r.userId + '|' + (r.episodeId || ''));
+      stats.listItems = await _bulkMerge(trx, 'listItem',   r => r.listId + '|' + (r.seasonId || '') + '|' + (r.episodeId || ''));
       // Drop loser's children (episodes/seasons) and the loser itself
       await trx('episode').where('tvShowId', loserId).delete();
       await trx('season').where('tvShowId', loserId).delete();

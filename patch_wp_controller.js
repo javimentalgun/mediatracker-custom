@@ -12,7 +12,15 @@ const method = `  watchProviders = (0, _typescriptRoutesToOpenapiServer.createEx
     const { mediaItemId } = req.query;
     const item = await _dbconfig.Database.knex('mediaItem').select('tmdbId','igdbId','openlibraryId','audibleId','mediaType','title').where('id', mediaItemId).first();
     if (!item) { res.status(404).send(); return; }
-    const TMDB_KEY = '779734046efc1e6127485c54d3b29627';
+    // Resolve TMDB key: env var first, then user-stored UI key in /storage/tmdb-key.json.
+    let TMDB_KEY = process.env.TMDB_API_KEY;
+    if (!TMDB_KEY) {
+      try { TMDB_KEY = (JSON.parse(require('fs').readFileSync('/storage/tmdb-key.json','utf8')).apiKey || '').trim() || null; } catch(_) { TMDB_KEY = null; }
+    }
+    if (!TMDB_KEY) {
+      res.status(503).json({ error: 'TMDB API key no configurada. Pégala en Tokens de aplicación (Tokens TMDB) o define TMDB_API_KEY en docker-compose.yml.' });
+      return;
+    }
     const results = [];
     try {
       if ((item.mediaType === 'movie' || item.mediaType === 'tv') && item.tmdbId) {
