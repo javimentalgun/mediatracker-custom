@@ -301,6 +301,12 @@ RUN node /tmp/patch_perf_indexes_migration.js
 COPY patch_perf_indexes_v2_migration.js /tmp/patch_perf_indexes_v2_migration.js
 RUN node /tmp/patch_perf_indexes_v2_migration.js
 
+# Performance v3: composite indexes that backup.importJson, userRating dedup,
+# and listItem membership checks need. Each adds a single index covering the
+# full WHERE pattern those queries use.
+COPY patch_perf_indexes_v3_migration.js /tmp/patch_perf_indexes_v3_migration.js
+RUN node /tmp/patch_perf_indexes_v3_migration.js
+
 # seen.kind column — distinguishes "actually played" (kind='played') from
 # "only watched / eye-click" (kind='watched'). Initial reclassification: rows where
 # the mediaItem is on the user's watchlist are marked 'watched' (eye-clicks added
@@ -627,6 +633,13 @@ RUN node /tmp/patch_theater_routes_enum.js
 COPY patch_theater_metadata_provider.js /tmp/patch_theater_metadata_provider.js
 RUN node /tmp/patch_theater_metadata_provider.js
 
+# teatro.es (CDT/INAEM) HTML scraper as a second source for theater. Wraps
+# WikidataTheater.search to merge teatroes results — covers contemporary
+# Spanish stagings that Wikidata doesn't track. MUST run after the wikidata
+# provider patch above.
+COPY patch_theater_teatroes_provider.js /tmp/patch_theater_teatroes_provider.js
+RUN node /tmp/patch_theater_teatroes_provider.js
+
 # Show a Material `theater_comedy` icon next to the "Teatro" mediaType label
 # on item cards.
 COPY patch_theater_card_icon.js /tmp/patch_theater_card_icon.js
@@ -780,6 +793,11 @@ RUN node /tmp/patch_update_metadata_btn.js
 COPY patch_per_game_runtime_refresh.js /tmp/patch_per_game_runtime_refresh.js
 RUN node /tmp/patch_per_game_runtime_refresh.js
 
+# Inline IGDB-token hint in the section header on /games (between item count
+# and the filter dropdown). Points users to /settings/application-tokens.
+COPY patch_games_igdb_hint.js /tmp/patch_games_igdb_hint.js
+RUN node /tmp/patch_games_igdb_hint.js
+
 # Hide the empty "I am watching/reading/listening/playing it" placeholder for
 # theater items — it has no label branch for theater so it renders as a 34×6 px
 # ghost button. _AIP ("Marcar como en proceso") already covers the same intent.
@@ -867,6 +885,12 @@ RUN node /tmp/patch_css_rename.js
 # current locations into the "Application tokens" settings tab.
 COPY patch_credentials_to_tokens.js /tmp/patch_credentials_to_tokens.js
 RUN node /tmp/patch_credentials_to_tokens.js
+
+# Self-service TMDB API key: backend GET/PUT /api/tmdb/key + UI box in
+# /settings/application-tokens. Persists in /storage/tmdb-key.json (admin-only).
+# MUST run after patch_credentials_to_tokens (mount inside _AT_EXT).
+COPY patch_tmdb_user_key.js /tmp/patch_tmdb_user_key.js
+RUN node /tmp/patch_tmdb_user_key.js
 
 # /api/jellyfin/import-from-server: scan all of Jellyfin and (1) mark existing
 # MT items as downloaded, (2) create stubs for items not yet in MT (TMDB
