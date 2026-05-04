@@ -1,174 +1,123 @@
-# mediatracker-custom — patched fork of bonukai/MediaTracker
+# MediaTOC
 
-> Maintained by **javi.mental.gun** — a personal fork. Current release: **v0.1.2**.
+> *Para los que tenemos un toque de TOC con todo lo que vemos, leemos, jugamos y escuchamos.*
 
-Docker image that takes [bonukai/mediatracker](https://github.com/bonukai/MediaTracker) as base
-and applies **120+ patches** at build time. Each patch is a small Node.js script that surgically
-edits the minified frontend bundle or the compiled backend files inside the upstream image.
+Tracker auto-hospedado para tu colección entera de medios — pelis, series, juegos, libros, audiolibros, teatro y vídeos de YouTube — con la obsesión por el detalle que el resto de los trackers no quiere darte.
 
-This is a personal fork. The patches reflect *one* opinionated set of UX/feature changes; if any
-of them sound useful, adapt them. Everything is MIT.
+---
 
-## What you get on top of upstream
+## Qué es esto
 
-**Performance** — query rewrites and indexes that turn the heavy paginated pages from 5–11s
-into 50–200ms on a 38k-item library:
-- Composite index `seen(mediaItemId, userId)` (9.4s → 1ms)
-- COUNT fast-paths bypassing the joined-clone for the common "browse the tab" case
-- Forced `INDEXED BY` on `mediaItem` so the planner doesn't pick the wrong unique index
-- Short-circuited episode subqueries for non-tv mediaTypes
-- Eliminated redundant `lastSeen2` join, deferred startup metadata refresh by 5min
+Un tracker de medios pensado para **completistas y obsesivos**, en español de fábrica:
 
-**Backups** — full disaster-recovery setup:
-- `GET /api/backup` (binary `.db`), `GET /api/backup/export-json` (full-state JSON), `GET /api/backup/letterboxd` (CSV)
-- `POST /api/backup/restore` (uploads stage as `data.db.uploaded`, swap on restart)
-- `POST /api/backup/import` (replays a JSON export, matches by TMDB/IMDB/IGDB/TVDB id)
-- `auto_restore` on startup if `/storage/data.db` is missing
-- Host-side cron + verify scripts (in the data volume, not committed)
+- **Marca por tipo de consumo correcto**, no "visto" para todo: jugado / visto / leído / escuchado / asistido. Un mismo media puede tener varios.
+- **Doble integración con Jellyfin**: marca como descargado lo que tienes en tu biblioteca, abre el deeplink "Reproducir en Jellyfin", sincroniza al revés cuando ves algo en Jellyfin.
+- **YouTube** como un media más: suscríbete a canales, marca videos vistos, ve el feed reciente, persistencia que sobrevive a las caídas de la API RSS de YouTube.
+- **Teatro** con metadatos serios: Wikidata SPARQL para clásicos + scraping de teatro.es (CDT/INAEM) para producciones españolas modernas.
+- **Audiolibros** y libros con progreso por horas/minutos o por páginas, con tracking del último punto.
+- **Detección de duplicados** y herramienta de fusión sin perder seen/ratings/listas.
+- **Backup completo** auto-restaurable, exportable a JSON o Letterboxd CSV.
+- **i18n**: 7 idiomas (es / en / pt / fr / de / da / ko) con catálogo propio.
 
-**Multi-user hardening**:
-- Backup / dupes / cleanup / Jellyfin endpoints gated to admin only
-- `DELETE /api/seen/:seenId` checks ownership (was IDOR-vulnerable upstream)
-- `/api/user/:userId` restricted to self-or-admin
-- Cookie `Secure` flag on HTTPS, `SameSite=Lax`, `httpOnly`
+Pensado para vivir en tu propia infra junto a Jellyfin, qBittorrent, Home Assistant y demás.
 
-**i18n**:
-- 61 custom translation keys × 7 locales (en / es / pt / fr / de / da / ko)
-- Patches use `xo._("Key")`; the i18n_custom patch injects the per-locale chunks at build
+## Instalar
 
-**Features added** (non-exhaustive — see `PATCHES.md` for the full inventory):
-- `/downloaded` tab with sections by mediaType
-- `/youtube` tab — channel feed via RSS + per-user OAuth Google to auto-pull subscriptions
-- Jellyfin integration: status / sync / play-in-Jellyfin / reverse-sync / card badges
-- Duplicates detection + merge UI at `/dupes`
-- Catalog cleanup (purge orphan registrations from past searches)
-- Re-watch tracking with timestamps
-- Sectioned `/in-progress`, `/watchlist` pages with collapsible per-mediaType groups
-- HLTB (How Long To Beat) for games, runtime fetch for TV episodes
-- TMDB watch providers in detail pages
-- `Audiobook` progress, `Read` progress, `Listen` progress as separate per-item fields
-- Custom progress modal with two parallel "I finished reading / listening" sections
-- About page rebrand
-
-## Install with Docker
-
-Requirements: Docker Engine 20+ and the Compose v2 plugin (`docker compose`, two words).
+Requisitos: Docker Engine 20+ con plugin Compose v2.
 
 ```sh
-# 1. Clone this repo
-git clone https://github.com/javimentallab/mediatracker-custom.git mediatracker-build
-cd mediatracker-build
+git clone https://github.com/javimentallab/mediatracker-custom.git mediatoc
+cd mediatoc
 
-# 2. Stage your compose file from the example
 cp docker-compose.example.yml docker-compose.yml
+${EDITOR:-nano} docker-compose.yml      # configura IGDB_CLIENT_ID/SECRET, opcional Jellyfin/YouTube/Google
 
-# 3. Edit env vars (TMDB_LANG, IGDB_CLIENT_ID/SECRET, optional Jellyfin/YouTube/Google).
-#    You don't NEED Jellyfin or YouTube to start; only TMDB + IGDB are required for
-#    metadata. Jellyfin is configurable from the UI later (Settings → Backup → Jellyfin).
-${EDITOR:-nano} docker-compose.yml
-
-# 4. Build the image (takes ~3-5min the first time, every patch runs in its own
-#    Docker layer so subsequent builds are cached and fast).
 docker compose build mediatracker
-
-# 5. Start
 docker compose up -d mediatracker
-
-# 6. Open http://localhost:7481 — first user to register is admin.
 ```
 
-The first run creates `/storage/data.db` and runs all upstream knex migrations. Subsequent
-restarts are fast.
+Abre `http://localhost:7481` — el primer usuario que registres es admin.
 
-**Mount points** (from `docker-compose.example.yml`):
-- `./mediatracker:/storage` — SQLite DB, Jellyfin/YouTube config JSONs, backups
-- `./mediatracker-assets:/assets` — TMDB poster cache, sized & resized images
+**Tokens y credenciales** se gestionan desde `Settings → Tokens de aplicación`:
+- IGDB (obligatorio para juegos)
+- TMDB API key (recomendado para "Dónde ver" y duración de capítulos — pégala en la UI, se guarda en `/storage/tmdb-key.json` con permisos 0600)
+- Jellyfin (URL + API key)
+- YouTube (OAuth de Google)
 
-**Healthcheck**: built-in `wget /api/configuration` every 30s.
+## Cómo funciona por dentro
 
-**Cloudflare Tunnel** (optional, for public access): see `docker-compose.example.yml`
-for the `cloudflared` sidecar pattern. Configure the tunnel via the Cloudflare dashboard
-and pass the token as `TUNNEL_TOKEN` env var.
+MediaTOC se construye aplicando una secuencia de **184 parches `patch_*.js`** sobre la imagen `bonukai/mediatracker:latest`. Cada parche:
 
-## How the patch system works
+1. Lee un fichero del backend compilado o del bundle frontend.
+2. Comprueba un marker — si ya está parcheado, sale sin tocar (idempotente).
+3. Busca un anchor estable y lo sustituye por código nuevo.
+4. Si el anchor no aparece, falla ruidosamente — sabes que upstream cambió.
 
 ```
-FROM bonukai/mediatracker:latest@sha256:...   ← base image, pinned by digest
-  └── COPY patch_X.js → RUN node patch_X.js    ← one patch per layer
-      ...                                       ← order is significant
-  └── RUN <recompress bundle>                   ← regen .gz/.br after all bundle edits
-HEALTHCHECK                                     ← /api/configuration every 30s
+FROM bonukai/mediatracker:latest@sha256:...
+  └── COPY patch_X.js → RUN node patch_X.js   ← una capa Docker por parche
+      ...
+  └── recompresión .gz/.br tras los cambios CSS/JS
+HEALTHCHECK /api/configuration cada 30s
 ```
 
-Each `patch_*.js` file:
-1. Reads its target file (a backend `.js` in `/app/build/...` or the bundle at `/app/public/main_*.js`).
-2. Checks an `already-patched` marker → if found, exits 0 idempotently.
-3. Looks up an "anchor" — a stable substring of the original code.
-4. If the anchor is missing, exits 1 (the build fails loudly so you know upstream changed).
-5. Otherwise replaces the anchor with the patched version and writes the file back.
+Inventario completo en [`PATCHES.md`](PATCHES.md). Catálogo de strings i18n en [`STRINGS.md`](STRINGS.md).
 
-`PATCHES.md` is the canonical inventory, grouped by feature.
-
-## Updating to a newer upstream
+## Actualizar a un upstream nuevo
 
 ```sh
 docker pull bonukai/mediatracker:latest
 docker inspect bonukai/mediatracker:latest --format='{{index .RepoDigests 0}}'
-# ... copy the new sha256 into Dockerfile (FROM line)
+# pega el sha256 nuevo en la línea FROM del Dockerfile
 docker compose build mediatracker
 ```
 
-If a patch's anchor no longer matches the new upstream, the build fails on that step and
-prints the patch name. Open it, find the new corresponding code in the rebuilt bundle, and
-update the anchor.
+Si un parche se rompe porque su anchor desapareció en el nuevo upstream, el build falla mostrando el nombre del parche. Lo abres, buscas el nuevo bloque equivalente y actualizas el anchor.
 
-## Custom endpoints
+## Endpoints añadidos
 
-| Method | Path | Purpose |
+| Método | Path | Para qué |
 |---|---|---|
-| `GET` | `/api/backup` | Download binary `data.db` (admin) |
-| `GET` | `/api/backup/export-json` | Full-state JSON export (admin) |
-| `GET` | `/api/backup/letterboxd` | CSV for letterboxd.com import (admin) |
-| `POST` | `/api/backup/restore` | Stage `.db` upload as `data.db.uploaded` (admin) |
-| `POST` | `/api/backup/import` | Merge JSON export into current DB (admin) |
-| `POST` | `/api/catalog/cleanup` | Purge orphan mediaItems (admin) |
-| `GET` | `/api/dupes` | Find candidate duplicates (admin) |
-| `POST` | `/api/dupes/merge` | Merge duplicate items (admin) |
-| `PATCH` | `/api/downloaded` | Toggle `downloaded` flag |
-| `GET` `/PUT` | `/api/links` | External links per item |
-| `GET` | `/api/watch-providers` | TMDB/IGDB providers |
-| `PUT` | `/api/audio-progress` | Listening progress |
-| `PUT` | `/api/episode-progress` | Per-episode progress |
-| `POST` | `/api/episodes/fetch-runtimes` | Pull episode runtimes from TMDB |
-| `GET` | `/api/hltb` | HowLongToBeat data for a game |
-| `GET` `/POST` `/DELETE` | `/api/youtube/channels` | Configure subscribed channels |
-| `GET` | `/api/youtube/feed` | Recent videos across configured channels |
-| `GET` | `/api/youtube/oauth/start` | Begin Google OAuth flow |
-| `GET` | `/api/youtube/oauth/callback` | OAuth redirect target |
-| `GET` | `/api/youtube/oauth/status` | Connected user info |
-| `POST` | `/api/youtube/oauth/sync` | Pull subscriptions from linked Google account |
-| `DELETE` | `/api/youtube/oauth` | Unlink Google account, revoke tokens |
-| `GET` | `/api/jellyfin/status` | Jellyfin connectivity / last sync stats (admin) |
-| `POST` | `/api/jellyfin/sync` | Sync from Jellyfin → MT (admin) |
-| `GET` `/PUT` | `/api/jellyfin/config` | Read/save Jellyfin URL / API key / userId (admin) |
-| `POST` | `/api/youtube/watched` | Mark a YT video as watched (resolves duration via Data API) |
-| `DELETE` | `/api/youtube/watched/:videoId` | Unmark a watched video |
-| `GET` | `/api/youtube/watched-stats` | Total watched videos + seconds for the user |
+| `GET` | `/api/backup` | Descarga `data.db` binario (admin) |
+| `GET` | `/api/backup/export-json` | Export completo JSON (admin) |
+| `GET` | `/api/backup/letterboxd` | CSV para letterboxd.com (admin) |
+| `POST` | `/api/backup/restore` | Sube `.db` para restaurar al reiniciar (admin) |
+| `POST` | `/api/backup/import` | Importar JSON (matchea TMDB/IMDB/IGDB/TVDB) (admin) |
+| `POST` | `/api/catalog/cleanup` | Purgar mediaItems huérfanos (admin) |
+| `GET` `/POST` | `/api/dupes` | Detectar y fusionar duplicados (admin) |
+| `PATCH` | `/api/downloaded` | Toggle flag descargado |
+| `GET` `/PUT` | `/api/links` | Enlaces externos por item |
+| `GET` | `/api/watch-providers` | Dónde ver (TMDB providers) |
+| `PUT` | `/api/audio-progress` | Progreso escucha |
+| `PUT` | `/api/episode-progress` | Progreso por capítulo |
+| `POST` | `/api/episodes/fetch-runtimes` | Refrescar duración de capítulos (TMDB) |
+| `GET` | `/api/hltb` | HowLongToBeat para juegos |
+| `GET` `/PUT` | `/api/tmdb/key` | TMDB API key gestionada por UI (admin) |
+| `GET` `/POST` `/DELETE` | `/api/youtube/channels` | Suscripciones YouTube |
+| `GET` | `/api/youtube/feed` | Vídeos recientes (con `?fresh=1` para bypass caché) |
+| `*` | `/api/youtube/oauth/*` | OAuth Google (start/callback/status/sync) |
+| `POST` `/DELETE` | `/api/youtube/watched` | Marcar/desmarcar visto |
+| `GET` | `/api/youtube/watched-stats` | Stats del usuario |
+| `GET` `/POST` | `/api/jellyfin/*` | Status, sync, config (admin) |
 
-## Backups (host-side)
+## Backups en el host
 
-The image does not ship a host cron. The recommended setup:
+La imagen no incluye cron — el patrón recomendado:
 
 ```cron
 0 3 * * * /path/to/backup-mediatracker.sh >> /path/to/backup.log 2>&1
 30 3 * * * bash /path/to/verify-backup.sh --quiet >> /path/to/verify.log 2>&1
 ```
 
-Both scripts use `docker exec mediatracker` and rotate keeping 7 daily / 4 weekly / 3 monthly
-backups. They are not part of the image — keep them next to your data volume so they share
-ownership and survive image rebuilds.
+Los scripts hacen `docker exec mediatracker` con rotación 7 diarios / 4 semanales / 3 mensuales. Mejor mantenerlos fuera de la imagen, junto al volumen de datos.
 
-## License
+## Construido sobre [MediaTracker](https://github.com/bonukai/MediaTracker)
 
-- MediaTracker upstream: MIT (Bonukai)
-- Patches in this fork: MIT
+MediaTOC se apoya en el trabajo open-source de **bonukai/MediaTracker** ([MIT](https://github.com/bonukai/MediaTracker/blob/main/LICENSE)). Sin esa base nada de esto existiría — gracias.
+
+La arquitectura de parches mantiene la integración limpia con upstream: cuando bonukai publica fixes o features, podemos rebajar y los parches se reaplican (con quizás algún anchor a re-actualizar si hay cambios profundos). Ver [`NOTICE.md`](NOTICE.md) para los detalles de atribución.
+
+## Licencia
+
+MediaTOC y los parches de este repo están bajo **MIT** — ver [`LICENSE`](LICENSE).
+MediaTracker upstream también es **MIT** — ver [`NOTICE.md`](NOTICE.md).

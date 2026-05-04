@@ -1,14 +1,14 @@
-# Example docker-compose for mediatracker-custom.
+# Example docker-compose for MediaTOC.
 # Copy this to your real compose file and fill in the env vars.
 #
 # Required: nothing — Jellyfin and YouTube OAuth are optional.
 # All secrets below should ideally come from a `.env` file (not committed).
 
 services:
-  mediatracker:
-    build: .   # path to this repo (the mediatracker-build dir)
-    image: mediatracker-custom:latest
-    container_name: mediatracker
+  mediatoc:
+    build: .   # path to this repo (the mediatoc dir)
+    image: mediatoc:latest
+    container_name: mediatoc
     restart: unless-stopped
     ports:
       - "7481:7481"
