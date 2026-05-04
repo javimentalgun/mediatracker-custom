@@ -54,12 +54,19 @@ c = c.replace(dlpFnAnchor, dlpFnReplacement);
 const dlpTitleAnchor = 'r.createElement("h2",{className:"text-2xl mb-4 px-2"},xo._("Downloaded")),';
 if (!c.includes(dlpTitleAnchor)) { console.error('jellyfin import buttons: _DLP title anchor not found'); process.exit(1); }
 const dlpTitleReplacement =
-  'r.createElement("div",{className:"flex items-center gap-3 mb-4 px-2"},' +
+  // Header row: title with extra horizontal breathing room before the button.
+  'r.createElement("div",{className:"flex items-center gap-6 mb-2 px-2"},' +
     'r.createElement("h2",{className:"text-2xl"},xo._("Downloaded")),' +
     'r.createElement("button",{onClick:jfImport,disabled:jfBusy,className:"px-3 py-1 rounded text-sm text-white bg-purple-700 hover:bg-purple-800 disabled:bg-gray-500 disabled:cursor-not-allowed inline-flex items-center gap-1"},' +
       'r.createElement("i",{className:"material-icons text-base"},jfBusy?"hourglass_top":"refresh"),' +
       'jfBusy?xo._("Importing..."):xo._("Refresh from Jellyfin")' +
     ')' +
+  '),' +
+  // Hint pointing users to where Jellyfin is actually configured.
+  'r.createElement("p",{className:"text-sm text-gray-500 dark:text-gray-400 italic mb-4 px-2"},' +
+    'xo._("Configure Jellyfin connection in "),' +
+    'r.createElement("a",{href:"#/settings/application-tokens",className:"underline text-blue-600 dark:text-blue-400 not-italic"},xo._("Application tokens")),' +
+    '"."' +
   '),';
 c = c.replace(dlpTitleAnchor, dlpTitleReplacement);
 console.log('jellyfin import buttons: added button to Downloaded page (_DLP)');

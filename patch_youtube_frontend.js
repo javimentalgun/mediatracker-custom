@@ -23,7 +23,7 @@ const compDef = '_YT=function(){' +
   'var _watchedState=r.useState({set:{},count:0,totalSeconds:0}),watched=_watchedState[0],setWatched=_watchedState[1];' +
   'var _markBusyState=r.useState({}),markBusy=_markBusyState[0],setMarkBusy=_markBusyState[1];' +
   'var loadChannels=function(){fetch("/api/youtube/channels",{credentials:"same-origin"}).then(function(r){return r.json()}).then(setChannels).catch(function(){})};' +
-  'var loadVideos=function(){setVideos(null);fetch("/api/youtube/feed",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){setVideos(d.videos||[])}).catch(function(){setVideos([])})};' +
+  'var loadVideos=function(fresh){setVideos(null);fetch("/api/youtube/feed"+(fresh?"?fresh=1":""),{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){setVideos(d.videos||[])}).catch(function(){setVideos([])})};' +
   'var loadAuth=function(){fetch("/api/youtube/oauth/status",{credentials:"same-origin"}).then(function(r){return r.json()}).then(setAuth).catch(function(){setAuth({connected:false})})};' +
   'var loadWatched=function(){fetch("/api/youtube/watched-stats",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(d){var s={};(d.videoIds||[]).forEach(function(id){s[id]=true});setWatched({set:s,count:d.count||0,totalSeconds:d.totalSeconds||0})}).catch(function(){})};' +
   'var connectOauth=function(){window.location="/api/youtube/oauth/start"};' +
@@ -69,9 +69,15 @@ const compDef = '_YT=function(){' +
   'var formatDate=function(s){try{var d=new Date(s);var diff=(Date.now()-d.getTime())/86400000;if(diff<1)return "hoy";if(diff<2)return "ayer";if(diff<7)return Math.floor(diff)+" d\\u00edas";return d.toLocaleDateString("es",{day:"2-digit",month:"2-digit",year:"numeric"})}catch(_){return s}};' +
   'var formatHours=function(sec){if(!sec)return "0m";var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return (h?h+"h ":"")+m+"m"};' +
   'return r.createElement("div",{className:"p-2"},' +
-    'r.createElement("h2",{className:"text-2xl mb-4 px-2"},"YouTube"),' +
+    'r.createElement("h2",{className:"text-2xl mb-2 px-2"},"YouTube"),' +
     // OAuth account-link section moved to /settings/application-tokens
     // (rendered there via _YTAUTH in patch_credentials_to_tokens.js).
+    // Hint pointing users to where the YouTube account link is configured.
+    'r.createElement("p",{className:"text-sm text-gray-500 dark:text-gray-400 italic mb-3 px-2"},' +
+      'xo._("Link your YouTube account in "),' +
+      'r.createElement("a",{href:"#/settings/application-tokens",className:"underline text-blue-600 dark:text-blue-400 not-italic"},xo._("Application tokens")),' +
+      '"."' +
+    '),' +
     // Watched stats badge
     'r.createElement("div",{className:"mb-3 px-2 text-sm text-gray-600 dark:text-gray-300"},' +
       'r.createElement("i",{className:"material-icons text-base align-middle mr-1"},"visibility"),' +
@@ -107,9 +113,19 @@ const compDef = '_YT=function(){' +
         'xo._("Recent videos") + (videos?(" (" + videos.length + ")"):"")' +
       '),' +
       'openVids&&r.createElement("div",{className:"p-3"},' +
+        // Refresh button — bypasses the per-channel server cache via ?fresh=1
+        'r.createElement("div",{className:"mb-2 flex justify-end"},' +
+          'r.createElement("button",{onClick:function(){loadVideos(true)},disabled:videos===null,className:"px-3 py-1 text-sm rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 inline-flex items-center gap-1"},' +
+            'r.createElement("i",{className:"material-icons text-base"},"refresh"),' +
+            'xo._("Refresh")' +
+          ')' +
+        '),' +
         'videos===null?r.createElement("p",{className:"text-gray-500"},"Cargando..."):' +
         'videos.length===0?r.createElement("p",{className:"text-gray-500 italic"},xo._("No videos")):' +
-        'r.createElement("div",{className:"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"},' +
+        // Inline style — Tailwind tree-shook .grid/.grid-cols-*/.gap-* because
+        // the upstream JSX never used them, so className-based grid classes are
+        // a no-op here. Style attribute always wins.
+        'r.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"0.75rem"}},' +
           'videos.map(function(v){' +
             'var isWatched=!!watched.set[v.videoId];' +
             'var isBusy=!!markBusy[v.videoId];' +

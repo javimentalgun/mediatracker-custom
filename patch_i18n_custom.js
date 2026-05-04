@@ -134,20 +134,41 @@ const customKeys = {
   'Refresh from Jellyfin':        { es: 'Refrescar desde Jellyfin', pt: 'Atualizar do Jellyfin', fr: 'Actualiser depuis Jellyfin', de: 'Von Jellyfin aktualisieren', da: 'Opdater fra Jellyfin', ko: 'Jellyfin에서 새로고침' },
   'Importing...':                 { es: 'Importando...', pt: 'Importando...', fr: 'Importation...', de: 'Importiere...', da: 'Importerer...', ko: '가져오는 중...' },
   'Refresh IGDB time':            { es: 'Refrescar tiempo IGDB', pt: 'Atualizar tempo IGDB', fr: 'Actualiser le temps IGDB', de: 'IGDB-Zeit aktualisieren', da: 'Opdater IGDB-tid', ko: 'IGDB 시간 새로고침' },
-  'Refreshing IGDB...':           { es: 'Refrescando IGDB...', pt: 'Atualizando IGDB...', fr: 'Actualisation IGDB...', de: 'IGDB wird aktualisiert...', da: 'Opdaterer IGDB...', ko: 'IGDB 새로고침 중...' }
+  'Refreshing IGDB...':           { es: 'Refrescando IGDB...', pt: 'Atualizando IGDB...', fr: 'Actualisation IGDB...', de: 'IGDB wird aktualisiert...', da: 'Opdaterer IGDB...', ko: 'IGDB 새로고침 중...' },
+
+  // === Application-tokens hints + TMDB UI (v1.1.0+) ===
+  'Application tokens':           { es: 'Tokens de aplicación', pt: 'Tokens da aplicação', fr: "Tokens d'application", de: 'Anwendungstokens', da: 'Applikationstokens', ko: '애플리케이션 토큰' },
+  'Configure Jellyfin connection in ': { es: 'Puedes configurar la conexión con Jellyfin en ', pt: 'Podes configurar a ligação ao Jellyfin em ', fr: 'Vous pouvez configurer la connexion à Jellyfin dans ', de: 'Du kannst die Jellyfin-Verbindung einrichten in ', da: 'Du kan konfigurere Jellyfin-forbindelsen i ', ko: 'Jellyfin 연결은 다음에서 구성: ' },
+  'Link your YouTube account in ':{ es: 'Puedes vincular tu cuenta de YouTube en ', pt: 'Podes vincular a tua conta do YouTube em ', fr: 'Vous pouvez lier votre compte YouTube dans ', de: 'Verknüpfe dein YouTube-Konto in ', da: 'Du kan tilknytte din YouTube-konto i ', ko: 'YouTube 계정 연결은 다음에서: ' },
+  'IGDB time configurable in ':   { es: 'Tiempo IGDB configurable en ', pt: 'Tempo IGDB configurável em ', fr: 'Temps IGDB configurable dans ', de: 'IGDB-Zeit konfigurierbar in ', da: 'IGDB-tid kan konfigureres i ', ko: 'IGDB 시간 구성 위치: ' },
+  'Refresh':                      { es: 'Refrescar', pt: 'Atualizar', fr: 'Actualiser', de: 'Aktualisieren', da: 'Opdater', ko: '새로고침' },
+
+  // === TMDB user key UI (patch_tmdb_user_key.js) ===
+  'TMDB tokens':                  { es: 'Tokens TMDB', pt: 'Tokens TMDB', fr: 'Tokens TMDB', de: 'TMDB-Tokens', da: 'TMDB-tokens', ko: 'TMDB 토큰' },
+  'TMDB key info':                { es: 'Necesaria para "Dónde ver" (proveedores) y "Refrescar duración de capítulos". Regístrate en ', pt: 'Necessária para "Onde ver" (provedores) e "Atualizar duração de episódios". Regista-te em ', fr: 'Nécessaire pour "Où regarder" (fournisseurs) et "Actualiser la durée des épisodes". Inscrivez-vous sur ', de: 'Benötigt für „Wo sehen" (Anbieter) und „Episodendauer aktualisieren". Registriere dich auf ', da: 'Nødvendig for "Hvor du kan se" (udbydere) og "Opdater episodevarighed". Tilmeld dig på ', ko: '"보기 위치"(공급자)와 "에피소드 재생시간 갱신"에 필요. 가입처: ' },
+  'TMDB key info suffix':         { es: ' y pega tu API key (v3 auth, hex).', pt: ' e cola a tua API key (v3 auth, hex).', fr: " et collez votre clé API (v3 auth, hex).", de: ' und füge deinen API-Key ein (v3 auth, hex).', da: ' og indsæt din API-nøgle (v3 auth, hex).', ko: '에서 가입 후 API 키 붙여넣기 (v3 auth, hex).' },
+  'Configured':                   { es: 'Configurada', pt: 'Configurada', fr: 'Configurée', de: 'Konfiguriert', da: 'Konfigureret', ko: '구성됨' },
+  'source:':                      { es: 'fuente:', pt: 'fonte:', fr: 'source :', de: 'Quelle:', da: 'kilde:', ko: '출처:' },
+  'TMDB not configured warning':  { es: 'No configurada — los "Dónde ver" y refresco de capítulos no funcionarán.', pt: 'Não configurada — "Onde ver" e atualização de duração não funcionarão.', fr: 'Non configurée — "Où regarder" et l\'actualisation des durées ne fonctionneront pas.', de: 'Nicht konfiguriert — „Wo sehen" und Laufzeitaktualisierung funktionieren nicht.', da: 'Ikke konfigureret — "Hvor du kan se" og varighedsopdatering virker ikke.', ko: '구성되지 않음 — "보기 위치"와 재생시간 갱신이 작동하지 않습니다.' },
+  'Paste your TMDB API key':      { es: 'Pega tu TMDB API key (v3 auth)', pt: 'Cola a tua TMDB API key (v3 auth)', fr: 'Collez votre clé API TMDB (v3 auth)', de: 'Füge deinen TMDB-API-Key ein (v3 auth)', da: 'Indsæt din TMDB API-nøgle (v3 auth)', ko: 'TMDB API 키 붙여넣기 (v3 auth)' },
+  'Save':                         { es: 'Guardar', pt: 'Guardar', fr: 'Enregistrer', de: 'Speichern', da: 'Gem', ko: '저장' },
+  'Delete':                       { es: 'Borrar', pt: 'Apagar', fr: 'Supprimer', de: 'Löschen', da: 'Slet', ko: '삭제' },
+  'Confirm delete TMDB key':      { es: '¿Borrar la TMDB API key guardada?', pt: 'Apagar a TMDB API key guardada?', fr: 'Supprimer la clé TMDB enregistrée ?', de: 'Gespeicherten TMDB-Key löschen?', da: 'Slet den gemte TMDB-nøgle?', ko: '저장된 TMDB 키를 삭제할까요?' },
+  'Key saved.':                   { es: 'Key guardada.', pt: 'Key guardada.', fr: 'Clé enregistrée.', de: 'Key gespeichert.', da: 'Nøgle gemt.', ko: '키 저장됨.' },
+  'Key deleted.':                 { es: 'Key borrada.', pt: 'Key apagada.', fr: 'Clé supprimée.', de: 'Key gelöscht.', da: 'Nøgle slettet.', ko: '키 삭제됨.' }
 };
 
 // Anchors per locale: `"In progress":"<translation>"` is the stable end-of-letter-I marker
 // in each locale chunk. Bumping any value here forces re-injection over old bundles.
 const LOCALES = [
-  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"Refreshing IGDB...":"Refreshing IGDB..."' },
-  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"Refreshing IGDB...":"Refrescando IGDB..."' },
-  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"Refreshing IGDB...":"Atualizando IGDB..."' },
+  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"Key deleted.":"Key deleted."' },
+  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"Key deleted.":"Key borrada."' },
+  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"Key deleted.":"Key apagada."' },
   // FR uses double-quoted JS string so the apostrophe in "l'hôte" doesn't terminate the literal
-  { code: 'fr', anchor: '"In progress":"En cours"',        marker: '"Refreshing IGDB...":"Actualisation IGDB..."' },
-  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"Refreshing IGDB...":"IGDB wird aktualisiert..."' },
-  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"Refreshing IGDB...":"Opdaterer IGDB..."' },
-  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"Refreshing IGDB...":"IGDB 새로고침 중..."' }
+  { code: 'fr', anchor: '"In progress":"En cours"',        marker: '"Key deleted.":"Clé supprimée."' },
+  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"Key deleted.":"Key gelöscht."' },
+  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"Key deleted.":"Nøgle slettet."' },
+  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"Key deleted.":"키 삭제됨."' }
 ];
 
 // Strip any prior injection: walk `,"key":"val"` pairs after the anchor as long as the

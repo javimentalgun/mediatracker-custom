@@ -3,7 +3,8 @@ const zlib = require('zlib');
 const child = require('child_process');
 
 // Override page background:
-//   light mode → "cáscara de huevo" (#F0EAD6)
+//   light mode → pure white (#FFFFFF) — user prefers crisp white over the
+//                previous "cáscara de huevo" #F0EAD6 cream.
 //   dark mode  → near-black (#121212) — slightly lifted off pure black so OLED
 //                contrast doesn't crush text rendering.
 // Tailwind already emits `body { background-color: rgb(64 64 64) }` and
@@ -12,12 +13,12 @@ const child = require('child_process');
 const cssPath = child.execSync("ls /app/public/main_*.css | grep -v '\\.gz\\|\\.br'").toString().trim();
 let css = fs.readFileSync(cssPath, 'utf8');
 
-const marker = '/* mt-fork: background overrides */';
+const marker = '/* mt-fork: background overrides v2 (white light) */';
 if (css.includes(marker)) {
   console.log('background colors: already patched');
 } else {
   const override = '\n' + marker + '\n' +
-    'html body{background-color:#F0EAD6;}\n' +
+    'html body{background-color:#FFFFFF;}\n' +
     'html.dark body{background-color:#121212;}\n';
   css = css + override;
   fs.writeFileSync(cssPath, css);

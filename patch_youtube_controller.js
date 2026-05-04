@@ -102,17 +102,51 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
     try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
     const channels = data.channels || [];
     if (channels.length === 0) { res.json({ videos: [] }); return; }
-    // Cache feed in memory (5 min) per-user
-    if (!global._ytCache) global._ytCache = new Map();
-    const cacheKey = 'u' + userId + ':' + channels.map(c => c.id).sort().join(',');
+    // Per-channel cache (5 min TTL). Keyed by channelId — global, shared across users
+    // because RSS content is the same for everyone. Adding/removing channels does
+    // NOT invalidate the others (vs. the previous "key = sorted list of channels"
+    // which caused every channel to be re-fetched on add/remove → if any single
+    // RSS hit was rate-limited, that channel's videos vanished from the feed).
+    //
+    // Persisted to disk (/storage/youtube-feed-cache.json) so it survives container
+    // restarts — important because YouTube's RSS endpoint has been throwing 404s
+    // for hours at a time since Dec-2025; without persistence, every restart would
+    // empty the cache and leave the feed at 0 videos until YouTube recovered.
+    const cacheFile = '/storage/youtube-feed-cache.json';
+    if (!global._ytChannelCache) {
+      global._ytChannelCache = new Map();
+      try {
+        const raw = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        for (const id of Object.keys(raw || {})) {
+          const v = raw[id];
+          if (v && Array.isArray(v.entries) && typeof v.at === 'number') {
+            global._ytChannelCache.set(id, v);
+          }
+        }
+      } catch (_) {}
+    }
+    const persistCache = () => {
+      try {
+        const obj = {};
+        for (const [id, v] of global._ytChannelCache) obj[id] = v;
+        fs.writeFileSync(cacheFile, JSON.stringify(obj));
+      } catch (_) {}
+    };
+    const TTL = 5 * 60 * 1000;
     const now = Date.now();
-    const cached = global._ytCache.get(cacheKey);
-    if (cached && (now - cached.at) < 5 * 60 * 1000) { res.json({ videos: cached.videos, cached: true }); return; }
-    // Fetch all RSS in parallel
-    const results = await Promise.all(channels.map(async ch => {
+    const fresh = req.query && req.query.fresh === '1';
+    let cacheDirty = false;
+    const fetchChannel = async (ch) => {
+      const cached = global._ytChannelCache.get(ch.id);
+      if (!fresh && cached && (now - cached.at) < TTL) return cached.entries;
       try {
         const r = await fetch('https://www.youtube.com/feeds/videos.xml?channel_id=' + ch.id, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        if (!r.ok) return [];
+        if (!r.ok) {
+          // Rate-limit / 5xx / YouTube's recurring 404 outage: fall back to last-known-good
+          // entries for this channel instead of returning [] (which would make the channel
+          // disappear from the feed during the outage).
+          return cached ? cached.entries : [];
+        }
         const xml = await r.text();
         const channelTitleMatch = xml.match(/<title>([^<]+)<\\/title>/);
         const channelTitle = channelTitleMatch ? channelTitleMatch[1] : ch.name;
@@ -139,11 +173,23 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
         }
         // Cap per-channel to the 4 most-recent videos so the feed doesn't drown in
         // one prolific channel's uploads.
-        return entries.sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 4);
-      } catch (e) { return []; }
-    }));
+        const sorted = entries.sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 4);
+        // Only refresh the cache entry if we got something — an empty parse on a
+        // 200 response (rare, but happens when YouTube serves an HTML error page
+        // with status 200) would otherwise overwrite good data with [].
+        if (sorted.length > 0) {
+          global._ytChannelCache.set(ch.id, { at: now, entries: sorted });
+          cacheDirty = true;
+          return sorted;
+        }
+        return cached ? cached.entries : [];
+      } catch (e) {
+        return cached ? cached.entries : [];
+      }
+    };
+    const results = await Promise.all(channels.map(fetchChannel));
+    if (cacheDirty) persistCache();
     const videos = [].concat(...results).sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 100);
-    global._ytCache.set(cacheKey, { at: now, videos });
     res.json({ videos });
   });
 `;
