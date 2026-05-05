@@ -25,6 +25,8 @@ const fresh = `const _knex = _dbconfig.Database.knex;
     // For TV: must have at least one seen episode AND at least one aired non-special
     // episode still unwatched. The orig fast-path was missing the "still unwatched"
     // condition, counting completed series as "in progress" (303 vs real 61).
+    // For non-TV: also covers audiobooks/listening progress on books (audioProgress
+    // strictly between 0 and 1, including a re-listen after the book was finished).
     sqlCountQuery = _knex('mediaItem').modify(_applyMt).where(qb => qb
       .whereExists(qbb => qbb.from('progress').whereRaw('progress.mediaItemId = mediaItem.id').where('progress.userId', userId).where('progress.progress', '<', 1))
       .orWhere(qb2 => qb2.where('mediaItem.mediaType', 'tv')
@@ -35,6 +37,7 @@ const fresh = `const _knex = _dbconfig.Database.knex;
           .where('episode.releaseDate', '<=', currentDateString)
           .whereNotExists(qbs => qbs.from('seen').whereRaw('seen.episodeId = episode.id').where('seen.userId', userId))
         ))
+      .orWhere(qb3 => qb3.whereNot('mediaItem.mediaType', 'tv').where('mediaItem.audioProgress', '>', 0).where('mediaItem.audioProgress', '<', 1))
     ).count('* as count');
   } else if (onlyWithNextAiring) {
     sqlCountQuery = _knex('mediaItem').modify(_applyMt).where(qb => qb
