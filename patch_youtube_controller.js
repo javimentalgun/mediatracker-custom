@@ -201,7 +201,20 @@ const method = `  youtubeChannels = (0, _typescriptRoutesToOpenapiServer.createE
         return cached ? cached.entries : [];
       }
     };
-    const results = await Promise.all(channels.map(fetchChannel));
+    // Concurrency-limited fan-out: with N channels, only run K=5 in parallel
+    // at any moment so we don't fan out 50+ requests against YouTube RSS at
+    // once (which sometimes triggers 429s during their flaky-RSS windows).
+    // Worker-pool — each of K workers picks the next available channel.
+    const _CONCURRENCY = 5;
+    const results = new Array(channels.length);
+    let _next = 0;
+    const _workers = Array.from({ length: Math.min(_CONCURRENCY, channels.length) }, async () => {
+      while (_next < channels.length) {
+        const idx = _next++;
+        results[idx] = await fetchChannel(channels[idx]);
+      }
+    });
+    await Promise.all(_workers);
     if (cacheDirty) await persistCache();
     const videos = [].concat(...results).sort((a, b) => new Date(b.published) - new Date(a.published)).slice(0, 100);
     res.json({ videos });
