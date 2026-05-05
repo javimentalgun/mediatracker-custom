@@ -66,7 +66,7 @@ const compDef = '_YT=function(){' +
       '.then(function(d){setMarkBusy(function(prev){var n=Object.assign({},prev);delete n[v.videoId];return n}.bind(null,markBusy)());if(d.error){setMsg({type:"error",text:d.error})}else{loadWatched()}})' +
       '.catch(function(e){setMarkBusy(function(prev){var n=Object.assign({},prev);delete n[v.videoId];return n}.bind(null,markBusy)());setMsg({type:"error",text:String(e.message||e)})})' +
   '};' +
-  'var formatDate=function(s){try{var d=new Date(s);var diff=(Date.now()-d.getTime())/86400000;if(diff<1)return "hoy";if(diff<2)return "ayer";if(diff<7)return Math.floor(diff)+" d\\u00edas";return d.toLocaleDateString("es",{day:"2-digit",month:"2-digit",year:"numeric"})}catch(_){return s}};' +
+  'var formatDate=function(s){try{var d=new Date(s);var diff=(Date.now()-d.getTime())/86400000;if(diff<1)return xo._("today");if(diff<2)return xo._("yesterday");if(diff<7){var n=Math.floor(diff);return n+" "+(n===1?xo._("day"):xo._("days"))}return d.toLocaleDateString("es",{day:"2-digit",month:"2-digit",year:"numeric"})}catch(_){return s}};' +
   'var formatHours=function(sec){if(!sec)return "0m";var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return (h?h+"h ":"")+m+"m"};' +
   'return r.createElement("div",{className:"p-2"},' +
     'r.createElement("h2",{className:"text-2xl mb-2 px-2"},"YouTube"),' +

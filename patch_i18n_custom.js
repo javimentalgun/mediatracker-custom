@@ -155,20 +155,26 @@ const customKeys = {
   'Delete':                       { es: 'Borrar', pt: 'Apagar', fr: 'Supprimer', de: 'Löschen', da: 'Slet', ko: '삭제' },
   'Confirm delete TMDB key':      { es: '¿Borrar la TMDB API key guardada?', pt: 'Apagar a TMDB API key guardada?', fr: 'Supprimer la clé TMDB enregistrée ?', de: 'Gespeicherten TMDB-Key löschen?', da: 'Slet den gemte TMDB-nøgle?', ko: '저장된 TMDB 키를 삭제할까요?' },
   'Key saved.':                   { es: 'Key guardada.', pt: 'Key guardada.', fr: 'Clé enregistrée.', de: 'Key gespeichert.', da: 'Nøgle gemt.', ko: '키 저장됨.' },
-  'Key deleted.':                 { es: 'Key borrada.', pt: 'Key apagada.', fr: 'Clé supprimée.', de: 'Key gelöscht.', da: 'Nøgle slettet.', ko: '키 삭제됨.' }
+  'Key deleted.':                 { es: 'Key borrada.', pt: 'Key apagada.', fr: 'Clé supprimée.', de: 'Key gelöscht.', da: 'Nøgle slettet.', ko: '키 삭제됨.' },
+
+  // === Relative dates (formatDate in patch_youtube_frontend.js) ===
+  'today':                        { es: 'hoy', pt: 'hoje', fr: "aujourd'hui", de: 'heute', da: 'i dag', ko: '오늘' },
+  'yesterday':                    { es: 'ayer', pt: 'ontem', fr: 'hier', de: 'gestern', da: 'i går', ko: '어제' },
+  'day':                          { es: 'día', pt: 'dia', fr: 'jour', de: 'Tag', da: 'dag', ko: '일' },
+  'days':                         { es: 'días', pt: 'dias', fr: 'jours', de: 'Tage', da: 'dage', ko: '일' }
 };
 
 // Anchors per locale: `"In progress":"<translation>"` is the stable end-of-letter-I marker
 // in each locale chunk. Bumping any value here forces re-injection over old bundles.
 const LOCALES = [
-  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"Key deleted.":"Key deleted."' },
-  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"Key deleted.":"Key borrada."' },
-  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"Key deleted.":"Key apagada."' },
+  { code: 'en', anchor: '"In progress":"In progress"',     marker: '"days":"days"' },
+  { code: 'es', anchor: '"In progress":"En proceso"',      marker: '"days":"días"' },
+  { code: 'pt', anchor: '"In progress":"Em curso"',        marker: '"days":"dias"' },
   // FR uses double-quoted JS string so the apostrophe in "l'hôte" doesn't terminate the literal
-  { code: 'fr', anchor: '"In progress":"En cours"',        marker: '"Key deleted.":"Clé supprimée."' },
-  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"Key deleted.":"Key gelöscht."' },
-  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"Key deleted.":"Nøgle slettet."' },
-  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"Key deleted.":"키 삭제됨."' }
+  { code: 'fr', anchor: '"In progress":"En cours"',        marker: '"days":"jours"' },
+  { code: 'de', anchor: '"In progress":"In Arbeit …"', marker: '"days":"Tage"' },
+  { code: 'da', anchor: '"In progress":"Igangværende"',    marker: '"days":"dage"' },
+  { code: 'ko', anchor: '"In progress":"진행 중"',          marker: '"days":"일"' }
 ];
 
 // Strip any prior injection: walk `,"key":"val"` pairs after the anchor as long as the
