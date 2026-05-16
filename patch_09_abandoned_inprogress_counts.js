@@ -2210,3 +2210,366 @@ const child = require('child_process');
 }
 
 })();
+
+// ===== patch_bugfix_pendiente_round2.js =====
+// Follow-up to patch_bugfix_pendiente_v2 (commit e713868). After that fix
+// surfaced three further regressions:
+//
+//   1. Series in the `abandoned` table reappeared in Pendiente. Root cause:
+//      `excludeAbandoned` / `onlyAbandoned` were never declared in the
+//      requestQuerySchema for /api/items and /api/items/paginated. AJV runs
+//      with `removeAdditional:true`, so both flags get stripped from req.query
+//      before they reach the controller. The relaxed TV "in progress" branch
+//      (orWhereNotNull('upcomingEpisode.tvShowId')) now pulls those shows in
+//      with no abandoned-filter to gate them.
+//   2. Books with a `progress=0` row keep appearing in Pendiente through the
+//      watchlist-released-not-seen branch. The user's flows that create those
+//      rows: (a) saving the Rp modal with slider at 0, (b) the `_markCompleted`
+//      "clear progress" call `un({progress:0})`, (c) the sidebar "Quitar
+//      completado" toggle. progress=0 is semantically "no progress" — store it
+//      as the absence of a row, not as a literal 0.
+//   3. After completing an audiobook (audioProgress=1) the listen-mode slider
+//      opens at 100%, which is the wrong starting point for a re-listen. Same
+//      for read mode if progress stuck at >=1 anywhere.
+//
+// Three coordinated fixes:
+//   A. /app/build/generated/routes/routes.js — extend both items schemas with
+//      excludeAbandoned / onlyAbandoned so AJV stops stripping them.
+//   B. /app/build/controllers/progress.js addItem — when args.progress === 0,
+//      delete the row instead of upserting. + one-time cleanup: drop existing
+//      progress=0 rows from the DB on boot (`progress=0_cleanup` knex
+//      migration).
+//   C. /app/public/main_*.js Rp modal — initial slider value caps at the
+//      open % only when it's strictly < 100; otherwise start at 0 (re-pass).
+;(() => {
+const fs = require('fs');
+const child = require('child_process');
+
+// === A. routes.js: allow excludeAbandoned / onlyAbandoned on /api/items ===
+{
+  const path = '/app/build/generated/routes/routes.js';
+  let c = fs.readFileSync(path, 'utf8');
+  if (c.includes('/* ITEMS_SCHEMA_ABND_V1 */')) {
+    console.log('bugfix r2 schema: already patched');
+  } else {
+    // Both schemas (paginated + non-paginated) share the same closing shape:
+    // `onlyWithProgress: { type: ['boolean', 'null'] },` — possibly followed by
+    // a `page: { ... },` for paginated. Inject excludeAbandoned/onlyAbandoned
+    // right after onlyWithProgress in both occurrences.
+    const old =
+      "            onlyWithProgress: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },";
+    const fresh =
+      "            onlyWithProgress: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            /* ITEMS_SCHEMA_ABND_V1 */\n" +
+      "            excludeAbandoned: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            onlyAbandoned: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            onlyDownloaded: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            onlyWatched: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            onlyPlayed: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },\n" +
+      "            onlyJustWatched: {\n" +
+      "              type: ['boolean', 'null']\n" +
+      "            },";
+    const oldUnindented =
+      "      onlyWithProgress: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      }";
+    const freshUnindented =
+      "      onlyWithProgress: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      /* ITEMS_SCHEMA_ABND_V1 */\n" +
+      "      excludeAbandoned: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      onlyAbandoned: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      onlyDownloaded: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      onlyWatched: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      onlyPlayed: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      },\n" +
+      "      onlyJustWatched: {\n" +
+      "        type: ['boolean', 'null']\n" +
+      "      }";
+
+    let edits = 0;
+    if (c.includes(old)) { c = c.replace(old, fresh); edits++; }
+    if (c.includes(oldUnindented)) { c = c.replace(oldUnindented, freshUnindented); edits++; }
+    if (edits === 0) {
+      console.error('bugfix r2 schema: neither anchor found in routes.js');
+      process.exit(1);
+    }
+    fs.writeFileSync(path, c);
+    try {
+      delete require.cache[require.resolve(path)];
+      require(path);
+      console.log('bugfix r2 schema: routes.js patched (' + edits + ' schema(s)), syntax OK');
+    } catch (e) {
+      console.error('bugfix r2 schema: routes.js SYNTAX ERROR ->', e.message.slice(0, 300));
+      process.exit(1);
+    }
+  }
+}
+
+// === B. progress.js: progress=0 deletes the row (+ cleanup migration) ===
+{
+  const path = '/app/build/controllers/progress.js';
+  let c = fs.readFileSync(path, 'utf8');
+  if (c.includes('/* PROGRESS_ZERO_DELETE_V1 */')) {
+    console.log('bugfix r2 progress=0: controller already patched');
+  } else {
+    const old =
+      "  } else {\n" +
+      "    await _dbconfig.Database.knex.transaction(async trx => {\n" +
+      "      const currentProgress = await trx('progress').where({\n" +
+      "        userId: args.userId,\n" +
+      "        mediaItemId: args.mediaItemId,\n" +
+      "        episodeId: args.episodeId || null\n" +
+      "      }).first();";
+    const fresh =
+      "  } else if (Number(args.progress) === 0) {\n" +
+      "    /* PROGRESS_ZERO_DELETE_V1 */\n" +
+      "    // progress=0 means \"no progress\" — drop any existing row so the\n" +
+      "    // in-progress filter and watchlist branch don't keep the item in\n" +
+      "    // Pendiente as a ghost.\n" +
+      "    await _dbconfig.Database.knex('progress').where({\n" +
+      "      userId: args.userId,\n" +
+      "      mediaItemId: args.mediaItemId,\n" +
+      "      episodeId: args.episodeId || null\n" +
+      "    }).delete();\n" +
+      "  } else {\n" +
+      "    await _dbconfig.Database.knex.transaction(async trx => {\n" +
+      "      const currentProgress = await trx('progress').where({\n" +
+      "        userId: args.userId,\n" +
+      "        mediaItemId: args.mediaItemId,\n" +
+      "        episodeId: args.episodeId || null\n" +
+      "      }).first();";
+    if (!c.includes(old)) {
+      console.error('bugfix r2 progress=0: anchor not found in progress.js');
+      process.exit(1);
+    }
+    c = c.replace(old, fresh);
+    fs.writeFileSync(path, c);
+    try {
+      delete require.cache[require.resolve(path)];
+      require(path);
+      console.log('bugfix r2 progress=0: progress.js patched, syntax OK');
+    } catch (e) {
+      console.error('bugfix r2 progress=0: progress.js SYNTAX ERROR ->', e.message.slice(0, 300));
+      process.exit(1);
+    }
+  }
+
+  // Add a knex migration that deletes existing progress=0 ghost rows so the
+  // user's current Pendiente list cleans up on next container start.
+  const migDir = '/app/build/migrations';
+  const migFile = '99999999999999_drop_progress_zero_ghosts.js';
+  const migPath = migDir + '/' + migFile;
+  if (fs.existsSync(migPath)) {
+    console.log('bugfix r2 progress=0: cleanup migration already present');
+  } else {
+    const body =
+      "// mt-fork: one-shot cleanup of progress=0 ghost rows. These were created\n" +
+      "// pre-PROGRESS_ZERO_DELETE_V1 by the Rp modal save / Marcar-como-completado\n" +
+      "// / Quitar-completado flows. Equivalent to absence-of-row semantically.\n" +
+      "exports.up = async function (knex) {\n" +
+      "  try {\n" +
+      "    await knex('progress').where('progress', 0).delete();\n" +
+      "  } catch (_) { /* swallow — not load-bearing for app boot */ }\n" +
+      "};\n" +
+      "exports.down = async function () { /* no-op */ };\n";
+    try {
+      fs.mkdirSync(migDir, { recursive: true });
+      fs.writeFileSync(migPath, body);
+      console.log('bugfix r2 progress=0: wrote cleanup migration ' + migFile);
+    } catch (e) {
+      console.error('bugfix r2 progress=0: failed to write migration ->', e.message);
+      process.exit(1);
+    }
+  }
+}
+
+// === D. items.js data query: drop non-TV watchlist-released-not-seen branch ===
+// The data query had a lenient branch that included items on watchlist that were
+// "released and never seen" as in-progress. The count fast-path already omits
+// this branch (it only counts items with real progress / partial seen / upcoming
+// episodes), so the header count and the visible list diverged. User-reported
+// case: 6 books appear in Pendiente but the count says 4 — the extra books are
+// to-read entries on the watchlist that never had progress. Drop the non-TV part;
+// keep the TV branch (watchlist + firstUnwatchedEpisode) which is meaningful.
+{
+  const path = '/app/build/knex/queries/items.js';
+  let c = fs.readFileSync(path, 'utf8');
+  if (c.includes('/* WATCHLIST_NONTV_DROPPED_V1 */')) {
+    console.log('bugfix r2 watchlist: items.js already patched');
+  } else {
+    const oldBranch =
+      "orWhere(qb => qb.whereNotNull('listItem.mediaItemId').andWhere(s2 => s2.where(qb => qb.whereNot('mediaItem.mediaType', 'tv').whereNotNull('mediaItem.releaseDate').whereNot('mediaItem.releaseDate', '').where('mediaItem.releaseDate', '<=', currentDateString).whereNull('lastSeen.mediaItemId')).orWhere(qb => qb.where('mediaItem.mediaType', 'tv').whereNotNull('firstUnwatchedEpisode.tvShowId'))))";
+    const newBranch =
+      "orWhere(qb => qb./* WATCHLIST_NONTV_DROPPED_V1 */whereNotNull('listItem.mediaItemId').where('mediaItem.mediaType', 'tv').whereNotNull('firstUnwatchedEpisode.tvShowId'))";
+    if (!c.includes(oldBranch)) {
+      console.error('bugfix r2 watchlist: items.js anchor not found');
+      process.exit(1);
+    }
+    c = c.replace(oldBranch, newBranch);
+    fs.writeFileSync(path, c);
+    try {
+      delete require.cache[require.resolve(path)];
+      require(path);
+      console.log('bugfix r2 watchlist: items.js data query no longer includes non-TV "released-on-watchlist" branch');
+    } catch (e) {
+      console.error('bugfix r2 watchlist: items.js SYNTAX ERROR ->', e.message.slice(0, 300));
+      process.exit(1);
+    }
+  }
+}
+
+// === E. calendar.js: exclude abandoned mediaItems from libSubquery ===
+// User-reported: abandoned shows still appear in /calendario. The libSubquery
+// builds the "user's actively-tracked library" set, but doesn't exclude items
+// the user has marked as abandoned. Add an EXCEPT clause so abandoned items
+// drop out of both episode and non-TV queries.
+{
+  const path = '/app/build/controllers/calendar.js';
+  let c = fs.readFileSync(path, 'utf8');
+  if (c.includes('/* CALENDAR_LIB_V4 */')) {
+    console.log('bugfix r2 calendar: calendar.js already patched');
+  } else {
+    const old =
+      "/* CALENDAR_LIB_V3 */\n" +
+      "  const libSubquery = `SELECT mediaItemId FROM listItem li JOIN list l ON l.id = li.listId WHERE l.userId = ${uid}\n" +
+      "                       UNION SELECT mediaItemId FROM progress WHERE userId = ${uid} AND progress > 0 AND progress < 1\n" +
+      "                       UNION SELECT DISTINCT episode.tvShowId AS mediaItemId FROM episode JOIN seen ON seen.episodeId = episode.id WHERE seen.userId = ${uid}`;";
+    const fresh =
+      "/* CALENDAR_LIB_V4 */\n" +
+      "  const libSubquery = `SELECT mediaItemId FROM (\n" +
+      "                         SELECT mediaItemId FROM listItem li JOIN list l ON l.id = li.listId WHERE l.userId = ${uid}\n" +
+      "                         UNION SELECT mediaItemId FROM progress WHERE userId = ${uid} AND progress > 0 AND progress < 1\n" +
+      "                         UNION SELECT DISTINCT episode.tvShowId AS mediaItemId FROM episode JOIN seen ON seen.episodeId = episode.id WHERE seen.userId = ${uid}\n" +
+      "                       ) WHERE mediaItemId NOT IN (SELECT mediaItemId FROM abandoned WHERE userId = ${uid})`;";
+    if (!c.includes(old)) {
+      console.error('bugfix r2 calendar: libSubquery anchor not found');
+      process.exit(1);
+    }
+    c = c.replace(old, fresh);
+    fs.writeFileSync(path, c);
+    try {
+      delete require.cache[require.resolve(path)];
+      require(path);
+      console.log('bugfix r2 calendar: libSubquery now excludes abandoned items');
+    } catch (e) {
+      console.error('bugfix r2 calendar: calendar.js SYNTAX ERROR ->', e.message.slice(0, 300));
+      process.exit(1);
+    }
+  }
+}
+
+// === F. Sidebar: keep "Progreso" line visible at any audioProgress > 0 ===
+// User-reported: after marking an audiobook as completed (audioProgress=1) the
+// percentage line below "Progreso escuchado" disappears, so the sidebar has
+// no visible indicator of listen state. Show the percentage whenever
+// audioProgress > 0 (still hide at exactly 0 / null — nothing meaningful to
+// display there). Same for read progress.
+{
+  const bundlePath = child.execSync('ls /app/public/main_*.js | grep -v "\\.LICENSE\\|\\.map"').toString().trim();
+  let c = fs.readFileSync(bundlePath, 'utf8');
+  if (c.includes('/* SIDEBAR_PROGRESS_ALWAYS_V1 */')) {
+    console.log('bugfix r2 sidebar progress: already patched');
+  } else {
+    let edits = 0;
+    const readOld = '(a.progress!=null&&a.progress>0&&a.progress<1)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*a.progress),"%")';
+    const readNew = '/* SIDEBAR_PROGRESS_ALWAYS_V1 */(a.progress!=null&&a.progress>0)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*a.progress),"%")';
+    if (c.includes(readOld)) { c = c.replace(readOld, readNew); edits++; }
+    const listenOld = '(a.audioProgress!=null&&a.audioProgress>0&&a.audioProgress<1)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*a.audioProgress),"%")';
+    const listenNew = '(a.audioProgress!=null&&a.audioProgress>0)&&r.createElement("div",{className:"text-xs mt-1"},"Progreso: ",Math.round(100*a.audioProgress),"%")';
+    if (c.includes(listenOld)) { c = c.replace(listenOld, listenNew); edits++; }
+    if (edits === 0) {
+      console.error('bugfix r2 sidebar progress: neither read nor listen anchor found');
+      process.exit(1);
+    }
+    fs.writeFileSync(bundlePath, c);
+    console.log('bugfix r2 sidebar progress: text now shown for any progress > 0 (' + edits + ' edits)');
+  }
+}
+
+// === C. Bundle: Rp modal _initI restarts at 0 on a finished pass ===
+{
+  const bundlePath = child.execSync('ls /app/public/main_*.js | grep -v "\\.LICENSE\\|\\.map"').toString().trim();
+  let c = fs.readFileSync(bundlePath, 'utf8');
+  if (c.includes('/* RP_REPASS_INIT_V1 */')) {
+    console.log('bugfix r2 re-pass: bundle already patched');
+  } else {
+    const old =
+      'var _initI=_tvEp?100*(_tvEp.progress||0):(_useAudio?100*(t.audioProgress||0):100*(t.progress||0));';
+    const fresh =
+      '/* RP_REPASS_INIT_V1 */' +
+      'var _initI=_tvEp?100*(_tvEp.progress||0):' +
+      '(_useAudio?(t.audioProgress&&t.audioProgress<1?100*t.audioProgress:0):' +
+      '(t.progress&&t.progress<1?100*t.progress:0));';
+    if (!c.includes(old)) {
+      console.error('bugfix r2 re-pass: _initI anchor not found');
+      process.exit(1);
+    }
+    c = c.replace(old, fresh);
+    fs.writeFileSync(bundlePath, c);
+    console.log('bugfix r2 re-pass: slider now opens at 0% after a finished pass');
+  }
+}
+
+// === G. Card progress bar uses max(audioProgress, progress) for non-TV ===
+// The detail/card progress bar (under the cover, "barra de progreso") was
+// gated by `jo(t)?audioProgress:progress` — i.e. it only read audioProgress
+// when the mediaType is audiobook. For a plain BOOK with audio progress
+// (user clicks "Progreso escuchado" on a book), audioProgress is set but
+// jo(t) is false, so the bar fell through to t.progress (zero) and stayed
+// invisible. Replace the binary with max() so the bar tracks whichever
+// progress field is non-zero. TV branch (Ro(t)) is preserved.
+{
+  const bundlePath = child.execSync('ls /app/public/main_*.js | grep -v "\\.LICENSE\\|\\.map"').toString().trim();
+  let c = fs.readFileSync(bundlePath, 'utf8');
+  if (c.includes('/* PROGRESS_BAR_MAX_V1 */')) {
+    console.log('bugfix r2 progress-bar: bundle already patched');
+  } else {
+    let edits = 0;
+    // (a) Visibility gate (low/high): two occurrences in the same expression.
+    const gateLowOld = '(jo(t)?(t.audioProgress||0):(t.progress||0))>0';
+    const gateLowNew = '/* PROGRESS_BAR_MAX_V1 */(Math.max(t.audioProgress||0,t.progress||0))>0';
+    if (c.includes(gateLowOld)) { c = c.replace(gateLowOld, gateLowNew); edits++; }
+    const gateHighOld = '(jo(t)?(t.audioProgress||0):(t.progress||0))<1';
+    const gateHighNew = '(Math.max(t.audioProgress||0,t.progress||0))<1';
+    if (c.includes(gateHighOld)) { c = c.replace(gateHighOld, gateHighNew); edits++; }
+    // (b) Percentage display + bar width: two parallel occurrences of the same
+    // value expression. Replace both — the TV branch via Ro(t) is preserved.
+    const valOld = 'jo(t)?(t.audioProgress||0):Ro(t)?((t.firstUnwatchedEpisode&&t.firstUnwatchedEpisode.progress)||0):(t.progress||0)';
+    const valNew = 'Ro(t)?((t.firstUnwatchedEpisode&&t.firstUnwatchedEpisode.progress)||0):Math.max(t.audioProgress||0,t.progress||0)';
+    // replaceAll: both `%` text and bar width should share the new value.
+    while (c.includes(valOld)) { c = c.replace(valOld, valNew); edits++; }
+    if (edits === 0) {
+      console.error('bugfix r2 progress-bar: no anchors matched');
+      process.exit(1);
+    }
+    fs.writeFileSync(bundlePath, c);
+    console.log('bugfix r2 progress-bar: card bar now uses max(audio,read) for non-TV (' + edits + ' edits)');
+  }
+}
+
+})();
