@@ -931,12 +931,12 @@ const bundlePath = require('child_process').execSync('ls /app/public/main_*.js |
 let c = fs.readFileSync(bundlePath, 'utf8');
 
 const NEW_NAME = 'MediaTOC';
-const TAGLINE = 'a media tracker for the obsessively organised';
+const TAGLINE = 'media tracker for the obsessively organised';
 
 const fresh = 'Wy=function(){var e=Ap().configuration;return r.createElement(r.Fragment,null,' +
   'r.createElement("div",null,' +
     'r.createElement("strong",null,"' + NEW_NAME + '"),' +
-    '" ",e.version,' +
+    '" v",e.version,' +
     'r.createElement("span",{style:{marginLeft:"0.75rem",fontSize:"0.85em",color:"#888",fontStyle:"italic"}},"' + TAGLINE + '")' +
   '),' +
   'r.createElement("div",{style:{marginTop:"1.5rem",fontSize:"0.9em",color:"#888"}},' +
@@ -944,8 +944,8 @@ const fresh = 'Wy=function(){var e=Ap().configuration;return r.createElement(r.F
   ')' +
 ')}';
 
-// Already at the latest version → nothing to do
-if (c.includes('"MediaTOC"') && c.includes('obsessively organised')) {
+// Idempotency check: bundle already has the current "v"+version + new tagline form
+if (c.includes('"MediaTOC"') && c.includes('" v",e.version') && c.includes('"' + TAGLINE + '"')) {
   console.log('about thanks: already injected (current version)');
   return /* was process.exit(0) */;
 }

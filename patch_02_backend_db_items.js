@@ -14,18 +14,28 @@ let c = fs.readFileSync(path, 'utf8');
 //   - server logs at startup ("MediaTracker v0.0.1 escuchando en …")
 //   - the About page (Settings → About → version field)
 // Bump this when you cut a new "release" of your fork.
-const FORK_VERSION = 'v1.1.1';
+// Bare semver (no "v" prefix). The /about page in the frontend (see
+// patch_about_thanks) prepends "v" so it renders "MediaTOC v1.1.3"; the
+// server log gets the bare form ("MediaTracker 1.1.3 listening at …").
+const FORK_VERSION = '1.1.3';
 
 const old = 'static version = _package.version;';
 const fresh = "static version = '" + FORK_VERSION + "';";
 
-if (c.includes("static version = 'v")) { console.log('version: already overridden'); return /* was process.exit(0) */; }
-if (!c.includes(old)) {
-  // Already patched with the previous suffix-based approach — strip it and re-apply
-  c = c.replace(/static version = _package\.version \+ '[^']+';/, fresh);
-  if (!c.includes(fresh)) { console.error('version: neither anchor matched'); process.exit(1); }
-} else {
+if (c.includes("static version = '" + FORK_VERSION + "'")) {
+  console.log('version: already at ' + FORK_VERSION);
+  return /* was process.exit(0) */;
+}
+// Overwrite ANY prior pinned version (v1.x.x or 1.x.x) — keeps re-bumps idempotent.
+const reAny = /static version = '[^']*';/;
+if (reAny.test(c)) {
+  c = c.replace(reAny, fresh);
+} else if (c.includes(old)) {
   c = c.replace(old, fresh);
+} else {
+  // Last-resort: previous suffix-based form
+  c = c.replace(/static version = _package\.version \+ '[^']+';/, fresh);
+  if (!c.includes(fresh)) { console.error('version: no anchor matched'); process.exit(1); }
 }
 fs.writeFileSync(path, c);
 console.log('version: set to ' + FORK_VERSION);
