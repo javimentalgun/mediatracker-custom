@@ -1876,18 +1876,23 @@ console.log('games-seen-split: _GVS injected and Zv render gated on /games filte
 })();
 
 // ===== patch_bugfix_pendiente_calendar_v1.js =====
-// Three related fixes for: "marking an episode as completed kicks the show out
-// of Pendiente and out of Calendario". Caused by three layers all collapsing
-// the show out of view as soon as no aired-unseen episodes remain — even when
-// the show still has future episodes scheduled.
-//   A. controllers/seen.js _removeFromWatchlistIfComplete: also block removal
-//      when future episodes exist (releaseDate IS NULL or > today).
-//   B. knex/queries/items.js onlyWithProgress: a TV show with any seen episode
-//      and a known upcomingEpisode keeps "in progress" status (data query +
-//      count fast-path).
+// Originally three related fixes for: "marking an episode as completed kicks
+// the show out of Pendiente AND out of Calendario". 2026-05-17 policy revision:
+// we no longer want such shows in "En Proceso" — that view should be
+// exclusively shows currently airing (some aired episode unseen) or partial
+// progress on non-TV items. Shows with only future episodes belong to
+// "Lista de seguimiento" + "Calendario".
+//   A. controllers/seen.js _removeFromWatchlistIfComplete: block watchlist
+//      removal when future episodes exist (releaseDate IS NULL or > today).
+//      KEPT — that's what keeps the show in "Lista de seguimiento".
+//   B. knex/queries/items.js onlyWithProgress: was relaxed to keep shows with
+//      upcomingEpisode in "En Proceso". DEACTIVATED — sections B.1 and B.3 are
+//      now rollbacks of any previously-relaxed form, so the En Proceso filter
+//      reverts to upstream behaviour (only aired-unseen counts).
+//      B.2 (non-TV strict 0<progress<1) is unrelated to that policy and stays.
 //   C. controllers/calendar.js libSubquery: include shows where any episode
 //      has a seen row, so the show keeps showing on the Calendar after the
-//      last aired episode is marked.
+//      last aired episode is marked. KEPT.
 ;(() => {
 const fs = require('fs');
 
@@ -1929,25 +1934,34 @@ const fs = require('fs');
   }
 }
 
-// === B. items.js: keep TV shows with upcoming episodes in onlyWithProgress ===
+// === B. items.js: onlyWithProgress policy — rollback "upcomingEpisode = in-progress" ===
 {
   const path = '/app/build/knex/queries/items.js';
   let c = fs.readFileSync(path, 'utf8');
 
-  // B.1 — data query: relax the TV "in progress" branch to include shows with
-  // upcomingEpisode (already leftJoined upstream).
+  // B.1 — DEACTIVATED 2026-05-17. Original intent (commit e713868) was to keep
+  // shows with upcomingEpisode in "En Proceso" after the user caught up on aired
+  // episodes. New policy: those shows belong to "Lista de seguimiento"
+  // (watchlist) + Calendar, NOT "En Proceso". "En Proceso" should only list
+  // shows currently airing (some aired episode unseen) or partial non-TV
+  // progress. We still need the watchlist non-removal (section A above) and the
+  // calendar libSubquery (section C below) so the show stays visible in those
+  // two surfaces. unseenEpisodesCount already filters to releaseDate <= today,
+  // so reverting to the upstream branch achieves the desired behaviour.
+  // Reverse-rollback also: if a previous build applied the "tvNew" form, fold
+  // it back to "tvOld" so the change is idempotent across rebuilds.
   const tvOld =
     "orWhere(qb => qb.where('mediaItem.mediaType', 'tv').where('seenEpisodesCount', '>', 0).andWhere('unseenEpisodesCount', '>', 0))";
-  const tvNew =
+  const tvRelaxed =
     "orWhere(qb => qb.where('mediaItem.mediaType', 'tv').where('seenEpisodesCount', '>', 0).andWhere(inner => inner.where('unseenEpisodesCount', '>', 0).orWhereNotNull('upcomingEpisode.tvShowId')))";
-  if (c.includes(tvNew)) {
-    console.log('bugfix pendiente: items.js data query TV branch already relaxed');
-  } else if (!c.includes(tvOld)) {
-    console.error('bugfix pendiente: items.js data query TV anchor not found');
-    process.exit(1);
+  if (c.includes(tvRelaxed)) {
+    c = c.replace(tvRelaxed, tvOld);
+    console.log('bugfix pendiente: items.js data query TV branch ROLLED BACK to upstream (no upcomingEpisode in En Proceso)');
+  } else if (c.includes(tvOld)) {
+    console.log('bugfix pendiente: items.js data query TV branch already at upstream form');
   } else {
-    c = c.replace(tvOld, tvNew);
-    console.log('bugfix pendiente: items.js data query keeps caught-up shows with upcoming ep');
+    console.error('bugfix pendiente: items.js data query TV anchor not found (neither old nor relaxed form)');
+    process.exit(1);
   }
 
   // B.2 — data query: require strictly partial progress for non-TV
@@ -1983,6 +1997,9 @@ const fs = require('fs');
     console.log('bugfix pendiente: count fast-path requires 0<progress<1');
   }
 
+  // count fast-path TV branch — same policy reversal as B.1. Roll the relaxed
+  // form back to the upstream "aired-unseen only" condition so the En Proceso
+  // count stays consistent with the data query.
   const cntTvOld =
     "    .orWhere(qb2 => qb2.where('mediaItem.mediaType', 'tv')\n" +
     "        .whereExists(qbb => qbb.from('seen').whereRaw('seen.mediaItemId = mediaItem.id').where('seen.userId', userId))\n" +
@@ -1992,7 +2009,7 @@ const fs = require('fs');
     "          .where('episode.releaseDate', '<=', currentDateString)\n" +
     "          .whereNotExists(qbs => qbs.from('seen').whereRaw('seen.episodeId = episode.id').where('seen.userId', userId))\n" +
     "        ))";
-  const cntTvNew =
+  const cntTvRelaxed =
     "    .orWhere(qb2 => qb2.where('mediaItem.mediaType', 'tv')\n" +
     "        .whereExists(qbb => qbb.from('seen').whereRaw('seen.mediaItemId = mediaItem.id').where('seen.userId', userId))\n" +
     "        .where(qbR => qbR\n" +
@@ -2007,14 +2024,14 @@ const fs = require('fs');
     "            .where(qbd => qbd.whereNull('episode.releaseDate').orWhere('episode.releaseDate', '>', currentDateString))\n" +
     "          )\n" +
     "        ))";
-  if (c.includes(cntTvNew)) {
-    console.log('bugfix pendiente: count fast-path TV branch already relaxed');
-  } else if (!c.includes(cntTvOld)) {
-    console.error('bugfix pendiente: count fast-path TV anchor not found');
-    process.exit(1);
+  if (c.includes(cntTvRelaxed)) {
+    c = c.replace(cntTvRelaxed, cntTvOld);
+    console.log('bugfix pendiente: count fast-path TV branch ROLLED BACK to upstream (no future-only shows in En Proceso count)');
+  } else if (c.includes(cntTvOld)) {
+    console.log('bugfix pendiente: count fast-path TV branch already at upstream form');
   } else {
-    c = c.replace(cntTvOld, cntTvNew);
-    console.log('bugfix pendiente: count fast-path keeps caught-up shows with future ep');
+    console.error('bugfix pendiente: count fast-path TV anchor not found (neither old nor relaxed form)');
+    process.exit(1);
   }
 
   fs.writeFileSync(path, c);
