@@ -33,6 +33,9 @@ pkg.dependencies.axios = '^0.30.0';
 pkg.dependencies['fast-xml-parser'] = '^4.5.5';
 pkg.dependencies['form-data'] = '^4.0.4';
 pkg.dependencies.lodash = '^4.18.0';
+// ajv is a direct dep — npm rejects overrides on direct deps (EOVERRIDE), so
+// bump it here (CVE: ReDoS via `$data` option, <=8.17.1).
+pkg.dependencies.ajv = '^8.20.0';
 
 pkg.overrides = pkg.overrides || {};
 // Plain global overrides (apply everywhere unless a deeper-nested rule wins).
@@ -42,6 +45,17 @@ pkg.overrides.axios = '^0.30.0';
 pkg.overrides['fast-xml-parser'] = '^4.5.5';
 pkg.overrides['form-data'] = '^4.0.4';
 pkg.overrides.lodash = '^4.18.0';
+// Second wave of CVE fixes (all minor bumps, no breaking changes):
+//   - qs               <=6.14.1 → 6.15.x  (DoS via memory exhaustion in bracket parser)
+//   - follow-redirects <=1.15.11 → 1.16.x (leaks Authorization headers cross-domain)
+//   - fast-uri         <=3.1.1 → 3.1.x   (path traversal via %-encoded dot segments)
+//   - @babel/runtime   <7.26.10 → 7.29.x (inefficient RegExp complexity)
+//   - ajv              <=8.17.1 → 8.20.x (ReDoS with `$data` option)
+pkg.overrides.qs = '^6.15.2';
+pkg.overrides['follow-redirects'] = '^1.16.0';
+pkg.overrides['fast-uri'] = '^3.1.2';
+pkg.overrides['@babel/runtime'] = '^7.29.2';
+// NOTE: ajv is in `dependencies` above — npm rejects overrides on direct deps.
 // Explicit nested override for express → path-to-regexp because the global
 // rule alone didn't propagate into express's bundled node_modules in our setup.
 pkg.overrides.express = pkg.overrides.express || {};
@@ -58,3 +72,8 @@ console.log('  direct: axios, fast-xml-parser, form-data, lodash');
 console.log('  overrides: path-to-regexp, tar-fs (+ direct deps for transitive enforcement)');
 
 })();
+
+// NOTE: patch_configuration_redact_secrets and patch_locale_fr_complete used to
+// live here but were moved to patch_02 (post-npm-install). The bonukai base
+// image's `npm install` re-extracts /app/build/ from packages, which wiped any
+// modification we made to /app/build/** before this step.

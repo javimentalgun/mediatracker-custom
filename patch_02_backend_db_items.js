@@ -387,3 +387,108 @@ try {
   process.exit(1);
 }
 })();
+
+// ===== patch_configuration_redact_secrets.js =====
+// SEC: /api/configuration returned igdbClientSecret + igdbClientId in plaintext
+// to anonymous callers. The frontend reads them for the admin Settings form,
+// but the endpoint is intentionally unauthenticated (the SPA needs locale +
+// enableRegistration before login). Redact both fields when there is no
+// authenticated user — admins logged in still see them in Settings.
+// Runs AFTER npm install (in patch_02) because npm install re-extracts the
+// bonukai base image's /app/build/ and would otherwise wipe this change.
+;(() => {
+const fs = require('fs');
+const path = '/app/build/controllers/configuration.js';
+let c = fs.readFileSync(path, 'utf8');
+const marker = '/* CONFIG_SECRETS_REDACT_V1 */';
+if (c.includes(marker)) { console.log('config redact: already patched'); return; }
+const old =
+  "    const configuration = await _globalSettings.configurationRepository.get();\n" +
+  "    const numberOfUsers = await _user.userRepository.count();\n" +
+  "    res.send({\n" +
+  "      ..._lodash.default.omit(configuration, 'id'),\n" +
+  "      noUsers: numberOfUsers === 0,\n" +
+  "      demo: _config.Config.DEMO,\n" +
+  "      version: _config.Config.version\n" +
+  "    });";
+const fresh =
+  "    " + marker + "\n" +
+  "    const configuration = await _globalSettings.configurationRepository.get();\n" +
+  "    const numberOfUsers = await _user.userRepository.count();\n" +
+  "    const _isAuthed = !!Number(req.user);\n" +
+  "    const _dropForAnon = ['igdbClientSecret', 'igdbClientId'];\n" +
+  "    const _cfgOmit = ['id'].concat(_isAuthed ? [] : _dropForAnon);\n" +
+  "    res.send({\n" +
+  "      ..._lodash.default.omit(configuration, _cfgOmit),\n" +
+  "      noUsers: numberOfUsers === 0,\n" +
+  "      demo: _config.Config.DEMO,\n" +
+  "      version: _config.Config.version\n" +
+  "    });";
+if (!c.includes(old)) {
+  console.error('config redact: anchor not found (controller layout changed?)');
+  process.exit(1);
+}
+c = c.replace(old, fresh);
+fs.writeFileSync(path, c);
+try {
+  delete require.cache[require.resolve(path)];
+  require(path);
+  console.log('config redact: igdbClient{Id,Secret} stripped from anonymous responses');
+} catch (e) {
+  console.error('config redact: SYNTAX ERROR ->', e.message.slice(0, 300));
+  process.exit(1);
+}
+})();
+
+// ===== patch_locale_fr_complete.js =====
+// FR was missing 7 notification strings (the other 6 locales all had 45 keys,
+// FR had 38). Filling them in — these power push notifications + the boot log,
+// so without translations they'd render in English on a French UI.
+// Same reason as config redact: runs in patch_02 (post-npm-install) so the
+// rewritten translation.js survives the bonukai base image's re-extraction.
+;(() => {
+const fs = require('fs');
+const path = '/app/build/i18n/locales/fr/translation.js';
+const marker = '/* FR_NOTIF_STRINGS_V1 */';
+const head = fs.readFileSync(path, 'utf8');
+if (head.includes(marker)) { console.log('fr notif strings: already patched'); return; }
+// translation.js is a CommonJS module — load it directly to get the live
+// `messages` object. Avoids fragile regex parsing of the JSON-in-JS-in-JS form.
+delete require.cache[require.resolve(path)];
+const mod = require(path);
+const messages = mod.messages || {};
+const additions = {
+  "MediaTracker listening at {address}": ["MediaTracker à l'écoute sur ", ["address"]],
+  "New season of {0} will be released at {1}": ["Une nouvelle saison de ", ["0"], " sortira le ", ["1"]],
+  "Release date changed for {0}: \"{1}\"": ["Date de sortie modifiée pour ", ["0"], " : « ", ["1"], " »"],
+  "Season {0} of {1} has been canceled": ["La saison ", ["0"], " de ", ["1"], " a été annulée"],
+  "Season {0} of {1} will be released at {2}": ["La saison ", ["0"], " de ", ["1"], " sortira le ", ["2"]],
+  "{count, plural, one {# episode for **{title}** has been released} other {# episodes for **{title}** has been released}}":
+    [["count", "plural", { "one": ["#", " épisode pour **", ["title"], "** est sorti"], "other": ["#", " épisodes pour **", ["title"], "** sont sortis"] }]],
+  "{count, plural, one {# episode of **{title}** has been released} other {# episodes of **{title}** has been released}}":
+    [["count", "plural", { "one": ["#", " épisode de **", ["title"], "** est sorti"], "other": ["#", " épisodes de **", ["title"], "** sont sortis"] }]]
+};
+let added = 0;
+for (const k in additions) {
+  if (!(k in messages)) { messages[k] = additions[k]; added++; }
+}
+// Rewrite the file from scratch in the same shape as upstream (JSON.parse of a
+// JSON-encoded string literal). JSON.stringify(JSON.stringify(...)) produces a
+// valid JS string literal complete with surrounding quotes.
+const body =
+  '// ' + marker + '\n' +
+  '"use strict";\n' +
+  'Object.defineProperty(exports, "__esModule", { value: true });\n' +
+  'exports.messages = void 0;\n' +
+  '/*eslint-disable*/const messages = exports.messages = JSON.parse(' + JSON.stringify(JSON.stringify(messages)) + ');\n';
+fs.writeFileSync(path, body);
+try {
+  delete require.cache[require.resolve(path)];
+  const re = require(path);
+  if (!re.messages || typeof re.messages !== 'object') throw new Error('re-require returned no messages');
+  console.log('fr notif strings: added ' + added + ' translations, total ' + Object.keys(re.messages).length);
+} catch (e) {
+  console.error('fr notif strings: REVERIFY ERROR ->', e.message.slice(0, 200));
+  process.exit(1);
+}
+})();
