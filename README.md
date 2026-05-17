@@ -1,5 +1,10 @@
 # MediaTOC
 
+[![validate-patches](https://github.com/javimentallab/mediatoc/actions/workflows/validate-patches.yml/badge.svg)](https://github.com/javimentallab/mediatoc/actions/workflows/validate-patches.yml)
+[![trivy-scan](https://github.com/javimentallab/mediatoc/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/javimentallab/mediatoc/actions/workflows/trivy-scan.yml)
+[![release](https://img.shields.io/github/v/release/javimentallab/mediatoc)](https://github.com/javimentallab/mediatoc/releases/latest)
+[![license](https://img.shields.io/github/license/javimentallab/mediatoc)](./LICENSE)
+
 > *A media tracker for the obsessively organised — the kind of person who cares which one of the 14 productions of "La casa de Bernarda Alba" they actually saw.*
 
 Self-hosted tracker for everything you watch, read, play, listen to and attend — movies, TV, video games, books, audiobooks, theatre and YouTube videos — with the level of detail that the rest of the trackers don't bother with.
@@ -86,6 +91,34 @@ Both scripts use `docker exec mediatoc` and rotate keeping 7 daily / 4 weekly / 
 The image is produced by composing a series of small JS scripts on top of a base image — see [`PATCHES.md`](PATCHES.md) for the full inventory. Each script is idempotent, fails loudly if the upstream layout changes (so build breaks rather than silently producing wrong code), and is one-Docker-layer per script for cache efficiency.
 
 CSS / JS edits regenerate the brotli + gzip pre-compressed variants so the static server (and any CDN in front) doesn't keep serving stale bytes after a rebuild.
+
+### Repo layout
+
+```
+.
+├── Dockerfile                       # FROM bonukai/mediatracker:<sha256> + COPY/RUN per patch
+├── docker-compose.example.yml       # service definition stub — copy to docker-compose.yml
+├── patch_01_security_pre_npm.js     # runs BEFORE npm install: package.json + overrides
+├── patch_02..10_*.js                # mega-patches grouped by domain
+├── _build_megapatches.js            # helper to consolidate ad-hoc scripts into mega-patches
+├── release.sh                       # version bump + tag + push + draft GH release
+├── PATCHES.md / STRINGS.md / SETUP_DOMAIN.md / TASKS.md
+└── .github/workflows/
+    ├── validate-patches.yml         # node --check + JSON sanity on every push/PR
+    └── trivy-scan.yml               # CVE scan on push/PR/weekly + SARIF to Security tab
+```
+
+> ⚠ **Important**: any patch that modifies `/app/build/**` (controllers, queries, locales, the SPA bundle, …) MUST live in `patch_02` or later. The bonukai base image's `npm install` step (run between `patch_01` and `patch_02`) re-extracts `/app/build/` from package sources, silently wiping anything `patch_01` wrote there.
+
+## Releasing
+
+```sh
+./release.sh 1.1.4
+```
+
+- Aborts if working tree is dirty, branch isn't `main`, tag already exists, or version isn't semver.
+- Bumps `FORK_VERSION` in `patch_02_backend_db_items.js`.
+- Commits, tags `v1.1.4`, pushes both, drafts a GitHub release with the commit log since the previous tag for you to edit before publishing.
 
 ## License
 
