@@ -1128,6 +1128,23 @@ const fresh =
   "    _itemsCacheHookInstalled = true;\n" +
   "  } catch (_) {}\n" +
   "}\n" +
+  "// Normalise args so the controller (req.query → strings) and the prewarm\n" +
+  "// (native types) produce the same cache key. Sort keys, drop empty/null,\n" +
+  "// coerce 'true'/'false'/numeric strings to their primitive form.\n" +
+  "function _normalizeItemsArgs(args) {\n" +
+  "  if (!args || typeof args !== 'object') return {};\n" +
+  "  const out = {};\n" +
+  "  const keys = Object.keys(args).sort();\n" +
+  "  for (const k of keys) {\n" +
+  "    let v = args[k];\n" +
+  "    if (v === null || v === undefined || v === '') continue;\n" +
+  "    if (v === 'true' || v === true) v = true;\n" +
+  "    else if (v === 'false' || v === false) v = false;\n" +
+  "    else if (typeof v === 'string' && /^-?\\d+(\\.\\d+)?$/.test(v)) v = Number(v);\n" +
+  "    out[k] = v;\n" +
+  "  }\n" +
+  "  return out;\n" +
+  "}\n" +
   "const _getItemsKnexUncached = async args => {";
 if (!c.includes(old)) { console.error('items response cache: anchor not found'); process.exit(1); }
 c = c.replace(old, fresh);
@@ -1141,7 +1158,7 @@ const cacheWrapper =
   "const getItemsKnex = async args => {\n" +
   "  _installItemsCacheInvalidationHook();\n" +
   "  // Key includes userId so users never see each other's data.\n" +
-  "  const key = String((args && args.userId) || 0) + '|' + JSON.stringify(args || {});\n" +
+  "  const key = String((args && args.userId) || 0) + '|' + JSON.stringify(_normalizeItemsArgs(args));\n" +
   "  const hit = _itemsCache.get(key);\n" +
   "  if (hit && (Date.now() - hit.at) < _ITEMS_CACHE_TTL) return hit.payload;\n" +
   "  const payload = await _getItemsKnexUncached(args);\n" +
@@ -1162,6 +1179,61 @@ try {
   console.log('items response cache: installed with TTL=30s, invalidation on write');
 } catch (e) {
   console.error('items response cache: SYNTAX ERROR ->', e.message.slice(0, 300));
+  process.exit(1);
+}
+})();
+
+// ===== patch_items_prewarm_home.js =====
+// Pre-warm the response cache (ITEMS_RESPONSE_CACHE_V1) shortly after boot so
+// the first home load after `docker compose restart` doesn't pay the full ~5s
+// cold cost. Fires the 4 useQuery shapes that components/Xv.js dispatches:
+//   - Upcoming     (onlyOnWatchlist + onlyWithNextAiring + orderBy nextAiring asc)
+//   - Recently     (orderBy lastAiring desc, onlySeenItems=false, excludeAbandoned)
+//   - Unrated      (orderBy lastSeen desc, onlySeenItems=true, onlyWithoutUserRating)
+//   - Next-ep     (mediaType=tv, onlyWithNextEpisodesToWatch + onlyOnWatchlist)
+// Runs once per user (i.e. usually once). 12s delay lets migrations and other
+// boot work finish — better-sqlite3 is synchronous so we don't want to block
+// the main event loop while routes are still wiring up.
+;(() => {
+const fs = require('fs');
+const path = '/app/build/knex/queries/items.js';
+let c = fs.readFileSync(path, 'utf8');
+const marker = '/* HOME_PREWARM_V1 */';
+if (c.includes(marker)) { console.log('home prewarm: already patched'); return; }
+// Anchor: the very last `exports.getItemsKnex = getItemsKnex;` line — append after it.
+const anchor = 'exports.getItemsKnex = getItemsKnex;';
+if (!c.includes(anchor)) { console.error('home prewarm: anchor not found'); process.exit(1); }
+const block = "\n" + marker + "\n" +
+  "setTimeout(async function () {\n" +
+  "  try {\n" +
+  "    const _kx = _dbconfig.Database.knex;\n" +
+  "    const users = await _kx('user').select('id');\n" +
+  "    let warmed = 0;\n" +
+  "    const t0 = Date.now();\n" +
+  "    for (const u of users) {\n" +
+  "      const userId = u.id;\n" +
+  "      const queries = [\n" +
+  "        { userId: userId, page: 1, orderBy: 'nextAiring', sortOrder: 'asc', onlyOnWatchlist: true, onlyWithNextAiring: true },\n" +
+  "        { userId: userId, page: 1, orderBy: 'lastSeen',   sortOrder: 'desc', mediaType: 'tv', onlyWithNextEpisodesToWatch: true, onlyOnWatchlist: true },\n" +
+  "        { userId: userId, page: 1, orderBy: 'lastAiring', sortOrder: 'desc', onlySeenItems: false, excludeAbandoned: true },\n" +
+  "        { userId: userId, page: 1, orderBy: 'lastSeen',   sortOrder: 'desc', onlySeenItems: true,  onlyWithoutUserRating: true }\n" +
+  "      ];\n" +
+  "      for (const args of queries) {\n" +
+  "        try { await getItemsKnex(args); warmed++; } catch (_) {}\n" +
+  "      }\n" +
+  "    }\n" +
+  "    const dt = Date.now() - t0;\n" +
+  "    if (warmed > 0) console.log('[mt-fork] home cache pre-warmed: ' + warmed + ' queries in ' + dt + 'ms');\n" +
+  "  } catch (_) { /* boot still in progress — skip silently */ }\n" +
+  "}, 12000);\n";
+c = c.replace(anchor, anchor + block);
+fs.writeFileSync(path, c);
+try {
+  delete require.cache[require.resolve(path)];
+  require(path);
+  console.log('home prewarm: scheduled (12s after boot)');
+} catch (e) {
+  console.error('home prewarm: SYNTAX ERROR ->', e.message.slice(0, 300));
   process.exit(1);
 }
 })();

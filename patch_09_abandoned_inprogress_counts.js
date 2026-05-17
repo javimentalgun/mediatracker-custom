@@ -2621,3 +2621,53 @@ const child = require('child_process');
 }
 
 })();
+
+// ===== patch_notifications_history_orphans.js =====
+// Bug: mergeDupes and catalog cleanup delete from mediaItem/episode but never
+// touch notificationsHistory, so 18%+ of that table ends up orphaned
+// (PRAGMA foreign_key_check fails on it). Not user-visible — the table is
+// only used for "don't send the same notification twice" — but it's a real
+// FK invariant break and the leak grows over time.
+//
+// Two-part fix as a knex migration:
+//   1. One-shot DELETE of existing orphans (mediaItem deleted OR episode deleted).
+//   2. SQLite triggers that cascade future mediaItem/episode deletes onto
+//      notificationsHistory. Triggers are checked into the live DB schema so
+//      they survive restarts and any future fork rebuild.
+;(() => {
+const fs = require('fs');
+const migDir = '/app/build/migrations';
+const migFile = '99999999999998_notifications_history_fk_cleanup.js';
+const migPath = migDir + '/' + migFile;
+if (fs.existsSync(migPath)) {
+  console.log('notif history fk cleanup: migration already present');
+  return;
+}
+const body =
+  "// mt-fork: clean up orphan notificationsHistory rows and install triggers\n" +
+  "// so future mediaItem/episode deletes don't re-orphan them. Safe to run\n" +
+  "// repeatedly — the WHERE clauses are no-ops when there's nothing to drop,\n" +
+  "// and the triggers use IF NOT EXISTS.\n" +
+  "exports.up = async function (knex) {\n" +
+  "  try {\n" +
+  "    await knex.raw(\"DELETE FROM notificationsHistory WHERE mediaItemId NOT IN (SELECT id FROM mediaItem)\");\n" +
+  "    await knex.raw(\"DELETE FROM notificationsHistory WHERE episodeId IS NOT NULL AND episodeId NOT IN (SELECT id FROM episode)\");\n" +
+  "    await knex.raw(\"CREATE TRIGGER IF NOT EXISTS mt_fork_mediaitem_cleanup_notifs AFTER DELETE ON mediaItem BEGIN DELETE FROM notificationsHistory WHERE mediaItemId = OLD.id; END\");\n" +
+  "    await knex.raw(\"CREATE TRIGGER IF NOT EXISTS mt_fork_episode_cleanup_notifs AFTER DELETE ON episode BEGIN DELETE FROM notificationsHistory WHERE episodeId = OLD.id; END\");\n" +
+  "  } catch (_) { /* not load-bearing — never block boot */ }\n" +
+  "};\n" +
+  "exports.down = async function (knex) {\n" +
+  "  try {\n" +
+  "    await knex.raw('DROP TRIGGER IF EXISTS mt_fork_mediaitem_cleanup_notifs');\n" +
+  "    await knex.raw('DROP TRIGGER IF EXISTS mt_fork_episode_cleanup_notifs');\n" +
+  "  } catch (_) {}\n" +
+  "};\n";
+try {
+  fs.mkdirSync(migDir, { recursive: true });
+  fs.writeFileSync(migPath, body);
+  console.log('notif history fk cleanup: wrote migration ' + migFile);
+} catch (e) {
+  console.error('notif history fk cleanup: failed to write migration ->', e.message);
+  process.exit(1);
+}
+})();
