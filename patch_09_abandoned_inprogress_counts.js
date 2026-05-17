@@ -1896,14 +1896,22 @@ console.log('games-seen-split: _GVS injected and Zv render gated on /games filte
 ;(() => {
 const fs = require('fs');
 
-// === A. seen.js: smarter "complete" check ===
+// === A. seen.js: smarter "complete" check (V3) ===
+// V3 (2026-05-17): also check mediaItem.status — TMDB shows in "Returning
+// Series" / "In Production" / "Planned" announce future seasons before any
+// episode rows exist in TMDB. The V2 query only sees materialised episodes,
+// so those shows get auto-removed from watchlist as soon as the current
+// season is finished. With V3 we treat those statuses as "not complete"
+// regardless of the episode count, so the show stays in Lista de
+// Seguimiento until either status flips to Ended/Canceled or new episodes
+// appear and the user finishes them too.
 {
   const path = '/app/build/controllers/seen.js';
   let c = fs.readFileSync(path, 'utf8');
-  if (c.includes('/* WL_COMPLETE_V2 */')) {
-    console.log('bugfix pendiente: watchlist complete v2 already applied');
+  if (c.includes('/* WL_COMPLETE_V3 */')) {
+    console.log('bugfix pendiente: watchlist complete v3 already applied');
   } else {
-    const old =
+    const oldUpstream =
       "      const unwatched = await knex('episode')\n" +
       "        .where('episode.tvShowId', mediaItem.id)\n" +
       "        .where('episode.isSpecialEpisode', false)\n" +
@@ -1912,7 +1920,7 @@ const fs = require('fs');
       "        .whereNotExists(function() { this.from('seen').whereRaw('seen.episodeId = episode.id').where('seen.userId', userId); })\n" +
       "        .count('* as c').first();\n" +
       "      isComplete = (Number(unwatched && unwatched.c) || 0) === 0;";
-    const fresh =
+    const oldV2 =
       "      /* WL_COMPLETE_V2 */\n" +
       "      const remaining = await knex('episode')\n" +
       "        .where('episode.tvShowId', mediaItem.id)\n" +
@@ -1924,13 +1932,36 @@ const fs = require('fs');
       "        )\n" +
       "        .count('* as c').first();\n" +
       "      isComplete = (Number(remaining && remaining.c) || 0) === 0;";
-    if (!c.includes(old)) {
-      console.error('bugfix pendiente: seen.js _removeFromWatchlistIfComplete anchor not found');
+    const fresh =
+      "      /* WL_COMPLETE_V3 */\n" +
+      "      const _wlItemRow = await knex('mediaItem').select('status').where('id', mediaItem.id).first();\n" +
+      "      const _wlReturning = ['Returning Series', 'In Production', 'Planned'];\n" +
+      "      if (_wlItemRow && _wlReturning.indexOf(_wlItemRow.status) >= 0) {\n" +
+      "        isComplete = false;\n" +
+      "      } else {\n" +
+      "        const remaining = await knex('episode')\n" +
+      "          .where('episode.tvShowId', mediaItem.id)\n" +
+      "          .where('episode.isSpecialEpisode', false)\n" +
+      "          .where(q => q\n" +
+      "            .whereNull('episode.releaseDate')\n" +
+      "            .orWhere('episode.releaseDate', '>', today)\n" +
+      "            .orWhereNotExists(function() { this.from('seen').whereRaw('seen.episodeId = episode.id').where('seen.userId', userId); })\n" +
+      "          )\n" +
+      "          .count('* as c').first();\n" +
+      "        isComplete = (Number(remaining && remaining.c) || 0) === 0;\n" +
+      "      }";
+    if (c.includes(oldV2)) {
+      c = c.replace(oldV2, fresh);
+      fs.writeFileSync(path, c);
+      console.log('bugfix pendiente: watchlist complete upgraded V2 -> V3 (status-aware)');
+    } else if (c.includes(oldUpstream)) {
+      c = c.replace(oldUpstream, fresh);
+      fs.writeFileSync(path, c);
+      console.log('bugfix pendiente: watchlist complete upstream -> V3 (status-aware)');
+    } else {
+      console.error('bugfix pendiente: seen.js _removeFromWatchlistIfComplete anchor not found (neither upstream nor V2 form)');
       process.exit(1);
     }
-    c = c.replace(old, fresh);
-    fs.writeFileSync(path, c);
-    console.log('bugfix pendiente: watchlist auto-remove now considers future episodes');
   }
 }
 
