@@ -492,3 +492,47 @@ try {
   process.exit(1);
 }
 })();
+
+// ===== patch_express_ptr_declared_version.js =====
+// npm audit reads the *declared* dep range from each package.json AND the
+// pinned version from package-lock.json — NOT the resolved bytes on disk.
+// Express 4.21.x declares `path-to-regexp: 0.1.7`/`0.1.12`, and `npm install`
+// records the same in the lockfile. We vendor-replace the nested install with
+// 0.1.13 (fix for GHSA-37ch-88jc-xwx2 ReDoS), but audit still cries because
+// it trusts the lockfile. Rewrite both files so audit matches reality.
+// No runtime impact — npm install already ran.
+;(() => {
+const fs = require('fs');
+const pkgPath = '/app/node_modules/express/package.json';
+const lockPath = '/app/package-lock.json';
+let touched = 0;
+// 1) express/package.json declaration
+try {
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const cur = pkg.dependencies && pkg.dependencies['path-to-regexp'];
+  if (cur !== '0.1.13' && cur !== '^0.1.13') {
+    pkg.dependencies = pkg.dependencies || {};
+    pkg.dependencies['path-to-regexp'] = '0.1.13';
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+    console.log('express ptr declare: package.json ' + (cur || '(missing)') + ' → 0.1.13');
+    touched++;
+  }
+} catch (_) { console.log('express ptr declare: express/package.json not found, skipping'); }
+// 2) package-lock.json entry for the nested install
+try {
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+  const lockKey = 'node_modules/express/node_modules/path-to-regexp';
+  if (lock.packages && lock.packages[lockKey] && lock.packages[lockKey].version !== '0.1.13') {
+    const old = lock.packages[lockKey].version;
+    lock.packages[lockKey].version = '0.1.13';
+    // Match the express entry's "dependencies" subtree too (lockfile v2/v3 metadata)
+    if (lock.packages['node_modules/express'] && lock.packages['node_modules/express'].dependencies) {
+      lock.packages['node_modules/express'].dependencies['path-to-regexp'] = '0.1.13';
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+    console.log('express ptr declare: lockfile ' + old + ' → 0.1.13');
+    touched++;
+  }
+} catch (_) { console.log('express ptr declare: lockfile not found, skipping'); }
+if (touched === 0) console.log('express ptr declare: already at 0.1.13');
+})();

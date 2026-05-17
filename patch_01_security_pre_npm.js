@@ -29,8 +29,16 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const before = JSON.stringify(pkg.dependencies);
 
 pkg.dependencies = pkg.dependencies || {};
-pkg.dependencies.axios = '^0.30.0';
-pkg.dependencies['fast-xml-parser'] = '^4.5.5';
+// Major bumps (third wave) — these are breaking changes upstream, but in our
+// codebase the only surfaces touched are:
+//   - axios:           response.data / error.response.data / axios.get/post.
+//                      paramsSerializer is unused. AxiosHeaders class is
+//                      backwards-compatible with plain-object access.
+//   - fast-xml-parser: only XMLParser is used (goodreads.js); the CVE is on
+//                      XMLBuilder which we don't touch. 5.x XMLParser API is
+//                      backwards-compatible.
+pkg.dependencies.axios = '^1.16.1';
+pkg.dependencies['fast-xml-parser'] = '^5.8.0';
 pkg.dependencies['form-data'] = '^4.0.4';
 pkg.dependencies.lodash = '^4.18.0';
 // ajv is a direct dep — npm rejects overrides on direct deps (EOVERRIDE), so
@@ -41,8 +49,8 @@ pkg.overrides = pkg.overrides || {};
 // Plain global overrides (apply everywhere unless a deeper-nested rule wins).
 pkg.overrides['path-to-regexp'] = '^0.1.13';
 pkg.overrides['tar-fs'] = '^2.1.4';
-pkg.overrides.axios = '^0.30.0';
-pkg.overrides['fast-xml-parser'] = '^4.5.5';
+pkg.overrides.axios = '^1.16.1';
+pkg.overrides['fast-xml-parser'] = '^5.8.0';
 pkg.overrides['form-data'] = '^4.0.4';
 pkg.overrides.lodash = '^4.18.0';
 // Second wave of CVE fixes (all minor bumps, no breaking changes):
@@ -55,6 +63,7 @@ pkg.overrides.qs = '^6.15.2';
 pkg.overrides['follow-redirects'] = '^1.16.0';
 pkg.overrides['fast-uri'] = '^3.1.2';
 pkg.overrides['@babel/runtime'] = '^7.29.2';
+pkg.overrides['on-headers'] = '^1.1.0'; // HTTP header manipulation (low) via express-session
 // NOTE: ajv is in `dependencies` above — npm rejects overrides on direct deps.
 // Explicit nested override for express → path-to-regexp because the global
 // rule alone didn't propagate into express's bundled node_modules in our setup.
