@@ -1,0 +1,77 @@
+name: trivy-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday 04:00 UTC — catches new advisories against an unchanged
+    # image. Pinned to off-peak so it doesn't compete with manual triggers.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: Trivy image scan (npm-deep + OS packages)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build mediatoc image (load locally only — no push)
+        run: |
+          docker build \
+            --tag mediatoc:ci \
+            --progress=plain \
+            . 2>&1 | tail -80
+
+      - name: Trivy — fail on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: mediatoc:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+          # CVE coverage: Alpine package DB + npm/yarn lockfiles inside the
+          # image. Skips secrets scan (would flag tokens in compose, which is
+          # the user's deployment file, not the image).
+          scanners: vuln
+          vuln-type: 'os,library'
+          timeout: 10m
+
+      - name: Trivy — full report (informational, never fails)
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: mediatoc:ci
+          format: table
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+          scanners: vuln
+          vuln-type: 'os,library'
+          timeout: 10m
+
+      - name: Upload SARIF for code-scanning
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: mediatoc:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: MEDIUM,HIGH,CRITICAL
+          scanners: vuln
+          vuln-type: 'os,library'
+
+      - name: Push SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image
